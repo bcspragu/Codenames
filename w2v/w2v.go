@@ -14,24 +14,26 @@ type gsr struct {
 
 var guesser *gsr
 
-func init() {
+// Init initializes the word2vec model.
+func Init(modelFile string) error {
 	fmt.Println("Opening w2v model...")
-	f, err := os.Open("w2v.bin")
+	f, err := os.Open(modelFile)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to open model file %q: %v", modelFile, err)
 	}
 	defer f.Close()
 
 	fmt.Println("Reading w2v model...")
 	model, err := word2vec.FromReader(f)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to parse model file %q: %v", modelFile, err)
 	}
 
 	guesser = &gsr{
 		model: model,
 	}
 	fmt.Println("Read w2v model")
+	return nil
 }
 
 // Similarity returns a value from 0 to 1, that is the similarity of the two
