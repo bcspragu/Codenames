@@ -134,9 +134,7 @@ func annosToBoard(annos []*visionpb.EntityAnnotation) *types.Board {
 	for i, an := range annos {
 		cns[i].Name = an.Description
 	}
-	return &types.Board{
-		Codenames: cns,
-	}
+	return &types.Board{Codenames: cns}
 }
 
 func round(x, nearest int) int {

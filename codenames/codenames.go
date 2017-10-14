@@ -111,6 +111,15 @@ func (g *Game) Guess(clue string) ([]string, error) {
 	return guesses, nil
 }
 
+func (g *Game) Assign(name string, team types.Team) {
+	for i, cn := range g.b.Codenames {
+		if cn.Name == name {
+			g.b.Codenames[i].Team = team
+			return
+		}
+	}
+}
+
 func parseClue(clue string) (string, int) {
 	ps := strings.Split(clue, " ")
 	if len(ps) != 2 {

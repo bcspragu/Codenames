@@ -26,6 +26,13 @@ type Codename struct {
 // Team is the affiliation of a codename.
 type Team int
 
+func (t Team) String() string {
+	if t == RedTeam {
+		return "Red"
+	}
+	return "Blue"
+}
+
 const (
 	// NoTeam means the codename doesn't belong to any agent (yet).
 	NoTeam Team = iota
