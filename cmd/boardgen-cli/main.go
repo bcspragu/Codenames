@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/boardgen"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 
 func main() {
 	// For now, assume Red Team goes first.
-	bd := board(codenames.RedTeam)
+	bd := boardgen.New(codenames.RedTeam)
 
 	var buf bytes.Buffer
 	for i, card := range bd.Cards {

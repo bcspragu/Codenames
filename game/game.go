@@ -10,7 +10,6 @@ import (
 
 // Game represents a game of codenames.
 type Game struct {
-	revealed    []bool
 	groundTruth *codenames.Board
 	cfg         *Config
 	activeTeam  codenames.Team
@@ -48,7 +47,6 @@ func New(b *codenames.Board, cfg *Config) (*Game, error) {
 	}
 
 	return &Game{
-		revealed:    make([]bool, 25),
 		groundTruth: b,
 		cfg:         cfg,
 		activeTeam:  cfg.Starter,
@@ -103,7 +101,7 @@ func (g *Game) Play() (*Outcome, error) {
 			sm, op = g.cfg.BlueSpymaster, g.cfg.BlueOperative
 		}
 
-		clue, err := sm.GiveClue(g.groundTruth)
+		clue, err := sm.GiveClue(codenames.CloneBoard(g.groundTruth))
 		if err != nil {
 			return nil, fmt.Errorf("GiveClue on %q: %v", g.activeTeam, err)
 		}
@@ -114,15 +112,17 @@ func (g *Game) Play() (*Outcome, error) {
 
 		for {
 			log.Println(numGuesses)
-			guess, err := op.Guess(g.revealedBoard(), clue)
+			guess, err := op.Guess(codenames.Revealed(g.groundTruth), clue)
 			if err != nil {
 				return nil, fmt.Errorf("Guess on %q: %v", g.activeTeam, err)
 			}
 			numGuesses--
 
-			c, err := g.flip(guess)
+			// TODO: If their guess is totally invalid, give them some sort of
+			// recovery mechanism to try again?
+			c, err := g.reveal(guess)
 			if err != nil {
-				return nil, fmt.Errorf("flip(%q) on %q: %v", guess, g.activeTeam, err)
+				return nil, fmt.Errorf("reveal(%q) on %q: %v", guess, g.activeTeam, err)
 			}
 
 			// Check if their guess ended the game.
@@ -150,12 +150,12 @@ func (g *Game) Play() (*Outcome, error) {
 	}
 }
 
-func (g *Game) flip(word string) (codenames.Card, error) {
+func (g *Game) reveal(word string) (codenames.Card, error) {
 	for i, card := range g.groundTruth.Cards {
 		if strings.ToLower(card.Codename) == strings.ToLower(word) {
-			// If the card hasn't been flipped, flip it.
-			if !g.revealed[i] {
-				g.revealed[i] = true
+			// If the card hasn't been reveal, reveal it.
+			if !g.groundTruth.Cards[i].Revealed {
+				g.groundTruth.Cards[i].Revealed = true
 				return card, nil
 			}
 			return codenames.Card{}, fmt.Errorf("%q has already been guessed", word)
@@ -175,22 +175,10 @@ func (g *Game) canKeepGuessing(numGuesses int, card codenames.Card) bool {
 	return card.Agent == targetAgent && numGuesses != 0
 }
 
-func (g *Game) revealedBoard() *codenames.Board {
-	out := make([]codenames.Card, codenames.Size)
-	for i, card := range g.groundTruth.Cards {
-		if g.revealed[i] {
-			out[i].Agent = card.Agent
-		} else {
-			out[i].Codename = card.Codename
-		}
-	}
-	return &codenames.Board{Cards: out}
-}
-
 func (g *Game) gameOver() (bool, codenames.Team) {
 	got := make(map[codenames.Agent]int)
 	for i, cn := range g.groundTruth.Cards {
-		if g.revealed[i] {
+		if g.groundTruth.Cards[i].Revealed {
 			got[cn.Agent]++
 		}
 	}

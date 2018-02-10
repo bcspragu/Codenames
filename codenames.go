@@ -46,9 +46,14 @@ func (c *Clue) String() string {
 
 // Codename is a single game card, and its corresponding affiliation.
 type Card struct {
+	// Codename is the word on the card, the "codename" of the agent.
 	Codename string
-	// Agent is the card
+	// Agent is the type of the card, or UnknownAgent if the player doesn't yet
+	// know the affiliation.
 	Agent Agent
+	// Revealed is true if the card has been guessed and the identity has been
+	// shown to operatives.
+	Revealed bool
 }
 
 // Agent is the affiliation of a codename.
@@ -116,6 +121,29 @@ func Targets(cards []Card, agent Agent) []Card {
 		}
 	}
 	return out
+}
+
+// Revealed takes in a fully-filled out Spymaster board, and returns a new
+// board where the card Agent is only populated for revealed cards.
+func Revealed(b *Board) *Board {
+	out := make([]Card, len(b.Cards))
+	for i, card := range b.Cards {
+		out[i].Revealed = card.Revealed
+		out[i].Codename = card.Codename
+		if card.Revealed {
+			out[i].Agent = card.Agent
+		}
+	}
+	return &Board{Cards: out}
+}
+
+// CloneBoard returns a deep copy of the given board.
+func CloneBoard(b *Board) *Board {
+	out := make([]Card, len(b.Cards))
+	for i, card := range b.Cards {
+		out[i] = card
+	}
+	return &Board{Cards: out}
 }
 
 func ParseClue(clue string) (*Clue, error) {
