@@ -20,6 +20,7 @@ import (
 // Converter handles turning a board picture into a text-board.
 type Converter struct {
 	client *vision.ImageAnnotatorClient
+	dict   *dict.Dictionary
 }
 
 // New builds a new Converter
@@ -57,7 +58,7 @@ func (c *Converter) BoardFromReader(ctx context.Context, r io.Reader) (*types.Bo
 	// Filter out the "words" we can't find in the dictionary. At the very least,
 	// this will handle the "return all the words as one entry" response entry.
 	for _, an := range resp.TextAnnotations {
-		if !dict.Valid(an.Description) {
+		if !c.dict.Valid(an.Description) {
 			continue
 		}
 		annos = append(annos, an)

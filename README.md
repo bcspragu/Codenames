@@ -8,7 +8,7 @@ and [word2vec](https://en.wikipedia.org/wiki/Word2vec) for hints and guesses.
 
 ## Usage
 
-The server takes three flags:
+The `codenames-local` binary takes three flags:
 
 * `--model_file` (Required) - A file containing a pre-trained word2vec model. Required, or
   the AI can't make associates between words.
