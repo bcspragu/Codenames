@@ -75,3 +75,21 @@ cd ~/word2vec_models/gutenberg
 time find . -regex "./1/1/.*/[0-9]+\.txt" -print0 | xargs -0 -I {} sh -c "cat {}
  | tr -c \"A-Za-z_' \n\" \" \" | tr A-Z a-z >> ~/everything.txt"
 ```
+
+### Some Numbers
+
+On GCE, 24cpu vs 2cpu -> ~10x improvement in speed.
+
+3.4GB text file
+184K "vocab" words
+130M individual words
+3m47s to train on 24cpu
+265k words/thread/sec during training
+74MB trained **binary** model size (45x smaller than training data)
+
+14.1GB text file (gs://codenames-gutenberg/actually_everything.sanitized_lowercase.txt)
+1M "vocab" words
+2.3B individual words
+51m24s to train on 24cpu
+300k words/thread/sec during training
+934M trained **text** model size (15x smaller than training data)
