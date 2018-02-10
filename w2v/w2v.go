@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sajari/word2vec"
+	"code.sajari.com/word2vec"
 )
 
 type gsr struct {
