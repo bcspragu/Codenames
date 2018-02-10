@@ -1,3 +1,4 @@
+// codenames-local runs a game of
 package main
 
 import (
@@ -18,12 +19,18 @@ var (
 		"red":  codenames.RedTeam,
 		"blue": codenames.BlueTeam,
 	}
+	agentMap = map[string]codenames.Agent{
+		"red":       codenames.RedAgent,
+		"blue":      codenames.BlueAgent,
+		"bystander": codenames.Bystander,
+		"assassin":  codenames.Assassin,
+	}
 )
 
 func main() {
 	var (
 		modelFile = flag.String("model_file", "w2v.bin", "A binary-formatted word2vec pre-trained model file.")
-		wordList  = flag.String("words", "", "Comma-separated list of words.")
+		wordList  = flag.String("words", "", "Comma-separated list of words and the agent they're assigned to. Ex dog:red,wallet:blue,bowl:assassin,glass:blue,hood:bystander")
 		starter   = flag.String("starter", "red", "Which color team starts the game")
 		team      = flag.String("team", "red", "Team to be")
 	)
@@ -63,36 +70,12 @@ func main() {
 	}
 
 	cards := make([]codenames.Card, len(words))
-	agents := []codenames.Agent{
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.RedAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.BlueAgent,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Bystander,
-		codenames.Assassin,
-	}
 	for i, w := range words {
-		cards[i].Codename = w
-		cards[i].Agent = agents[i]
+		c, err := parseCard(w)
+		if err != nil {
+			log.Fatalf("Failed on card #%d: %q: %v", i, w, err)
+		}
+		cards[i] = c
 	}
 	b := &codenames.Board{Cards: cards}
 	g, err := game.New(b, &game.Config{
@@ -118,4 +101,18 @@ func validColor(c string) error {
 	default:
 		return fmt.Errorf("invalid team color %q, 'red' and 'blue' are the only valid team colors", c)
 	}
+}
+
+func parseCard(in string) (codenames.Card, error) {
+	ps := strings.Split(clue, ":")
+	if len(ps) != 2 {
+		return codenames.Card{}, fmt.Errorf("malformed card string %q", in)
+	}
+
+	ag, ok := agentMap[strings.ToLower(ps[1])]
+	if !ok {
+		return codenames.Card{}, fmt.Errorf("invalid agent type %q", ps[1])
+	}
+
+	return codenames.Card{Codename: ps[0], Agent: ag}, nil
 }
