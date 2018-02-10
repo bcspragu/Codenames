@@ -130,7 +130,7 @@ func (g *Game) Play() (*Outcome, error) {
 			if over {
 				return &Outcome{Winner: winner}, nil
 			}
-			log.Printf("Guess %s was a %s", guess, c)
+			log.Printf("Guess %s was a %s", guess, c.Agent)
 
 			if g.canKeepGuessing(numGuesses, c) {
 				continue

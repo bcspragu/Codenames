@@ -104,9 +104,14 @@ const (
 
 // Unused returns a list of cards that haven't been assigned an Agent type yet.
 func Unused(cards []Card) []Card {
+	return Targets(cards, UnknownAgent)
+}
+
+// Unused returns a list of cards that haven't been assigned an Agent type yet.
+func Targets(cards []Card, agent Agent) []Card {
 	var out []Card
 	for _, card := range cards {
-		if card.Agent == UnknownAgent {
+		if card.Agent == agent {
 			out = append(out, card)
 		}
 	}
