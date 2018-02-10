@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/game"
+	"github.com/bcspragu/Codenames/io"
 	"github.com/bcspragu/Codenames/w2v"
 )
 
@@ -35,34 +37,76 @@ func main() {
 		log.Fatal(err)
 	}
 
+	words := strings.Split(*wordList, ",")
+	if len(words) != codenames.Size {
+		log.Fatalf("Expected %d words, got %d words", codenames.Size, len(words))
+	}
+
 	// Initialize our word2vec model.
 	ai, err := w2v.New(*modelFile)
 	if err != nil {
 		log.Fatalf("Failed to initialize word2vec model: %v", err)
 	}
 
-	words := strings.Split(*wordList, ",")
-	if len(words) != codenames.Size {
-		log.Fatalf("Expected %d words, got %d words", codenames.Size, len(words))
+	var (
+		rsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout, Team: codenames.RedTeam}
+		bsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout, Team: codenames.BlueTeam}
+		rop codenames.Operative = &io.Operative{In: os.Stdin, Out: os.Stdout, Team: codenames.RedTeam}
+		bop codenames.Operative = &io.Operative{In: os.Stdin, Out: os.Stdout, Team: codenames.BlueTeam}
+	)
+
+	switch teamMap[*starter] {
+	case codenames.RedTeam:
+		rop = ai
+	case codenames.BlueTeam:
+		bop = ai
 	}
 
-	cns := make([]codenames.Card, len(words))
+	cards := make([]codenames.Card, len(words))
+	agents := []codenames.Agent{
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.RedAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.BlueAgent,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Bystander,
+		codenames.Assassin,
+	}
 	for i, w := range words {
-		cns[i].Codename = w
+		cards[i].Codename = w
+		cards[i].Agent = agents[i]
 	}
-
-	b := &codenames.Board{}
+	b := &codenames.Board{Cards: cards}
 	g, err := game.New(b, &game.Config{
-		Team:        teamMap[*team],
-		Starter:     teamMap[*starter],
-		Role:        codenames.Operative,
-		OperativeAI: ai,
+		Starter:       teamMap[*starter],
+		RedSpymaster:  rsm,
+		BlueSpymaster: bsm,
+		RedOperative:  rop,
+		BlueOperative: bop,
 	})
 	if err != nil {
 		log.Fatalf("Failed to instantiate game: %v", err)
 	}
-	// TODO: Figure out how the game object should be played.
-	_ = g
+
+	fmt.Println(g.Play())
 }
 
 func validColor(c string) error {

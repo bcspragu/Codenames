@@ -1,6 +1,10 @@
 package codenames
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 const (
 	// Rows is the number of rows of cards in Codenames.
@@ -11,12 +15,12 @@ const (
 	Size = Rows * Columns
 )
 
-type SpymasterAI interface {
+type Spymaster interface {
 	// GiveClue takes in a board and returns a clue for players to guess with.
 	GiveClue(*Board) (*Clue, error)
 }
 
-type OperativeAI interface {
+type Operative interface {
 	// Guess takes in a board and a clue and returns the guessed Codename from
 	// the board.
 	Guess(*Board, *Clue) (string, error)
@@ -98,31 +102,6 @@ const (
 	BlueTeam
 )
 
-// Role is what type of player in the game you are.
-type Role int
-
-const (
-	// TODO: Decide if we want to allow games to be created that allow NoRole,
-	// i.e. no AI is playing. What would that even look like?
-	// NoRole is an error case.
-	NoRole Role = iota
-	// Spymaster is the person giving the hints.
-	Spymaster
-	// Operative is a field agent on a team, anyone who guesses the codenames on
-	// the board.
-	Operative
-)
-
-func (r Role) String() string {
-	switch r {
-	case Spymaster:
-		return "Spymaster"
-	case Operative:
-		return "Operative"
-	}
-	return ""
-}
-
 // Unused returns a list of cards that haven't been assigned an Agent type yet.
 func Unused(cards []Card) []Card {
 	var out []Card
@@ -132,4 +111,17 @@ func Unused(cards []Card) []Card {
 		}
 	}
 	return out
+}
+
+func ParseClue(clue string) (*Clue, error) {
+	ps := strings.Split(clue, " ")
+	if len(ps) != 2 {
+		return nil, fmt.Errorf("malformed clue %q", clue)
+	}
+	i, err := strconv.Atoi(ps[1])
+	if err != nil {
+		return nil, fmt.Errorf("malformed number of words in clue %q: %v", clue, err)
+	}
+
+	return &Clue{Word: ps[0], Count: i}, nil
 }

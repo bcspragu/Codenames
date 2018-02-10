@@ -1,118 +1,220 @@
 package game
 
 import (
-	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	codenames "github.com/bcspragu/Codenames"
 )
 
 // Game represents a game of codenames.
 type Game struct {
-	b          *codenames.Board
-	cfg        *Config
-	activeTeam codenames.Team
+	revealed    []bool
+	groundTruth *codenames.Board
+	cfg         *Config
+	activeTeam  codenames.Team
 }
 
 // Config holds configuration options for a game of Codenames.
 type Config struct {
-	// Team is which team the AI is on.
-	Team codenames.Team
-	// Role is this computer's role in the game.
-	Role codenames.Role
 	// Starter is the team that goese first
 	Starter codenames.Team
 
-	SpymasterAI codenames.SpymasterAI
-	OperativeAI codenames.OperativeAI
+	RedSpymaster  codenames.Spymaster
+	BlueSpymaster codenames.Spymaster
+
+	RedOperative  codenames.Operative
+	BlueOperative codenames.Operative
 }
 
 // New validates and initializes a game of Codenames.
 func New(b *codenames.Board, cfg *Config) (*Game, error) {
-	if err := validateBoard(b); err != nil {
+	if err := validateBoard(b, cfg.Starter); err != nil {
 		return nil, fmt.Errorf("invalid board given: %v", err)
 	}
 
-	if cfg.Team == codenames.NoTeam {
-		return nil, errors.New("team must be set")
+	if cfg.RedSpymaster == nil {
+		return nil, fmt.Errorf("RedSpymaster cannot be nil")
 	}
-
-	if cfg.Role == codenames.Spymaster && cfg.SpymasterAI == nil {
-		return nil, errors.New("spymaster AI must be specified when playing as Spymaster")
+	if cfg.BlueSpymaster == nil {
+		return nil, fmt.Errorf("BlueSpymaster cannot be nil")
 	}
-
-	if cfg.Role == codenames.Operative && cfg.OperativeAI == nil {
-		return nil, errors.New("operative AI must be specified when playing as an Operative")
+	if cfg.RedOperative == nil {
+		return nil, fmt.Errorf("RedOperative cannot be nil")
 	}
-
-	if cfg.Starter == codenames.NoTeam {
-		return nil, errors.New("starter team must be set")
-	}
-
-	if err := validateForRole(b, cfg.Role); err != nil {
-		return nil, fmt.Errorf("invalid %q board: %v", cfg.Role, err)
+	if cfg.BlueOperative == nil {
+		return nil, fmt.Errorf("BlueOperative cannot be nil")
 	}
 
 	return &Game{
-		b:          b,
-		cfg:        cfg,
-		activeTeam: cfg.Starter,
+		revealed:    make([]bool, 25),
+		groundTruth: b,
+		cfg:         cfg,
+		activeTeam:  cfg.Starter,
 	}, nil
 }
 
-func validateBoard(b *codenames.Board) error {
+// validateBoard validates that the board has the correct number of cards of
+// each type.
+func validateBoard(b *codenames.Board, starter codenames.Team) error {
 	if len(b.Cards) != codenames.Size {
 		return fmt.Errorf("board must contain %d codenames, found %d", codenames.Size, len(b.Cards))
 	}
-	return nil
-}
 
-// Guess takes a guess at a clue, given what is known about the board.
-func (g *Game) Guess(c *codenames.Clue) (string, error) {
-	if g.cfg.Role != codenames.Operative {
-		return "", errors.New("game isn't playing as Operative, it doesn't know how guess")
-	}
-	return g.cfg.OperativeAI.Guess(g.b, c)
-}
-
-// GiveClue generates a clue for the board.
-func (g *Game) GiveClue() (*codenames.Clue, error) {
-	if g.cfg.Role != codenames.Spymaster {
-		return nil, errors.New("game isn't playing as Spymaster, it doesn't know how to give clues")
-	}
-	return g.cfg.SpymasterAI.GiveClue(g.b)
-}
-
-func validateForRole(b *codenames.Board, role codenames.Role) error {
-	if role == codenames.NoRole {
-		return errors.New("role must be set")
-	}
-
-	var red, blue, assassin bool
+	got := make(map[codenames.Agent]int)
 	for _, cn := range b.Cards {
-		switch cn.Agent {
-		case codenames.RedAgent:
-			red = true
-		case codenames.BlueAgent:
-			blue = true
-		case codenames.Assassin:
-			assassin = true
+		got[cn.Agent]++
+	}
+
+	for ag, wc := range want(starter) {
+		if gc := got[ag]; gc != wc {
+			return fmt.Errorf("got %d cards of type %q, want %d", gc, ag, wc)
 		}
 	}
 
-	// We want red/blue/assassin to be set if	we're the Spymaster
-	want := role == codenames.Spymaster
-
-	if red != want {
-		return errors.New("missing red team codenames")
-	}
-
-	if blue != want {
-		return errors.New("missing blue team codenames")
-	}
-
-	if assassin != want {
-		return errors.New("missing assassin")
-	}
 	return nil
+}
+
+func want(starter codenames.Team) map[codenames.Agent]int {
+	w := map[codenames.Agent]int{
+		codenames.RedAgent:  9,
+		codenames.BlueAgent: 8,
+		codenames.Bystander: 7,
+		codenames.Assassin:  1,
+	}
+	if starter == codenames.BlueTeam {
+		w[codenames.BlueAgent], w[codenames.RedAgent] = 9, 8
+	}
+	return w
+}
+
+type Outcome struct {
+	Winner codenames.Team
+	// TODO: Add more stats, like correct guesses, misses, guesses for the other
+	// team, if anyone hit the assassin, etc.
+}
+
+func (g *Game) Play() (*Outcome, error) {
+	for {
+		// Let's play a round.
+		sm, op := g.cfg.RedSpymaster, g.cfg.RedOperative
+		if g.activeTeam == codenames.BlueTeam {
+			sm, op = g.cfg.BlueSpymaster, g.cfg.BlueOperative
+		}
+
+		clue, err := sm.GiveClue(g.groundTruth)
+		if err != nil {
+			return nil, fmt.Errorf("GiveClue on %q: %v", g.activeTeam, err)
+		}
+		numGuesses := clue.Count
+		if numGuesses == 0 {
+			numGuesses = -1
+		}
+
+		for {
+			log.Println(numGuesses)
+			guess, err := op.Guess(g.revealedBoard(), clue)
+			if err != nil {
+				return nil, fmt.Errorf("Guess on %q: %v", g.activeTeam, err)
+			}
+			numGuesses--
+
+			c, err := g.flip(guess)
+			if err != nil {
+				return nil, fmt.Errorf("flip(%q) on %q: %v", guess, g.activeTeam, err)
+			}
+
+			// Check if their guess ended the game.
+			over, winner := g.gameOver()
+			if over {
+				return &Outcome{Winner: winner}, nil
+			}
+			log.Printf("Guess %s was a %s", guess, c)
+
+			if g.canKeepGuessing(numGuesses, c) {
+				continue
+			}
+			if numGuesses == 0 {
+				log.Println("Out of guesses")
+			}
+
+			break
+		}
+
+		if g.activeTeam == codenames.BlueTeam {
+			g.activeTeam = codenames.RedTeam
+		} else {
+			g.activeTeam = codenames.BlueTeam
+		}
+	}
+}
+
+func (g *Game) flip(word string) (codenames.Card, error) {
+	for i, card := range g.groundTruth.Cards {
+		if strings.ToLower(card.Codename) == strings.ToLower(word) {
+			// If the card hasn't been flipped, flip it.
+			if !g.revealed[i] {
+				g.revealed[i] = true
+				return card, nil
+			}
+			return codenames.Card{}, fmt.Errorf("%q has already been guessed", word)
+		}
+	}
+	return codenames.Card{}, fmt.Errorf("no card found for guess %q", word)
+}
+
+func (g *Game) canKeepGuessing(numGuesses int, card codenames.Card) bool {
+	targetAgent := codenames.RedAgent
+	if g.activeTeam == codenames.BlueTeam {
+		targetAgent = codenames.BlueAgent
+	}
+
+	// They can keep guessing if the card was for their team and they have
+	// guesses left.
+	return card.Agent == targetAgent && numGuesses != 0
+}
+
+func (g *Game) revealedBoard() *codenames.Board {
+	out := make([]codenames.Card, codenames.Size)
+	for i, card := range g.groundTruth.Cards {
+		if g.revealed[i] {
+			out[i].Agent = card.Agent
+		} else {
+			out[i].Codename = card.Codename
+		}
+	}
+	return &codenames.Board{Cards: out}
+}
+
+func (g *Game) gameOver() (bool, codenames.Team) {
+	got := make(map[codenames.Agent]int)
+	for i, cn := range g.groundTruth.Cards {
+		if g.revealed[i] {
+			got[cn.Agent]++
+		}
+	}
+
+	for ag, wc := range want(g.cfg.Starter) {
+		if gc := got[ag]; gc == wc {
+			switch ag {
+			case codenames.RedAgent:
+				// If we've revealed all the red cards, the red team has won.
+				return true, codenames.RedTeam
+			case codenames.BlueAgent:
+				// If we've revealed all the blue cards, the blue team has won.
+				return true, codenames.BlueTeam
+			case codenames.Assassin:
+				// If we've revealed the assassin, the not-active team wins.
+				switch g.activeTeam {
+				case codenames.BlueTeam:
+					return true, codenames.RedTeam
+				case codenames.RedTeam:
+					return true, codenames.BlueTeam
+				}
+			}
+		}
+	}
+
+	return false, codenames.NoTeam
 }
