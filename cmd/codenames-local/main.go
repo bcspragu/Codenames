@@ -104,7 +104,7 @@ func validColor(c string) error {
 }
 
 func parseCard(in string) (codenames.Card, error) {
-	ps := strings.Split(clue, ":")
+	ps := strings.Split(in, ":")
 	if len(ps) != 2 {
 		return codenames.Card{}, fmt.Errorf("malformed card string %q", in)
 	}
