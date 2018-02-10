@@ -31,6 +31,10 @@ It's available on [Google Drive](https://drive.google.com/file/d/0B7XkCwpI5KDYNl
 
 ### Gutenberg
 
+gs://codenames-gutenberg contains 15GB txt files with all the gutenberg
+books concatenated together. There are 3 versions (no preprocessing, sanitization,
+sanitization + lower case).
+
 ```
 mkdir ~/word2vec_models
 
