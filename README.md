@@ -20,20 +20,25 @@ The `codenames-local` binary takes three flags:
   letters, used to sanitize Cloud Vision output. If not specified, the image
   parser may struggle to parse a valid board.
 
-## Pre-Trained Model
+## Models
+
+### GoogleNews
 
 Download the GoogleNews-nectors-negative300.bin.gz listed on https://code.google.com/archive/p/word2vec/.
 
 It's available on [Google Drive](https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit)
 
 
-## Training a new Model
+### Project Gutenberg
 
-### Gutenberg
+The single file with ~30k Project Gutenberg books concatenated together is available on
+[Google Drive](https://drive.google.com/open?id=1XznyDoivL3kffjL-BcNLK-BSOpJQVF1c). The file
+is ~5GB gzip'd and ~15GB uncompressed. It contains ~2.3 billion words in total.
 
-gs://codenames-gutenberg contains 15GB txt files with all the gutenberg
-books concatenated together. There are 3 versions (no preprocessing, sanitization,
-sanitization + lower case).
+There is a [pre-trained project gutenberg model](https://drive.google.com/open?id=1Dbe5pZhN7iJsNNVXnxJ6Zo8FgS-8cHAx)
+trained on this dataset available as well (400MB).
+
+If you want to get all the data yourself and train your own model, you can follow these steps:
 
 ```
 mkdir ~/word2vec_models
@@ -76,20 +81,21 @@ time find . -regex "./1/1/.*/[0-9]+\.txt" -print0 | xargs -0 -I {} sh -c "cat {}
  | tr -c \"A-Za-z_' \n\" \" \" | tr A-Z a-z >> ~/everything.txt"
 ```
 
-### Some Numbers
 
 On GCE, 24cpu vs 2cpu -> ~10x improvement in speed.
 
-3.4GB text file
-184K "vocab" words
-130M individual words
-3m47s to train on 24cpu
-265k words/thread/sec during training
-74MB trained **binary** model size (45x smaller than training data)
+- Training on a partial set of Project Gutenberg books
+  - 3.4GB text file
+  - 184K "vocab" words
+  - 130M individual words
+  - 3m47s to train on 24cpu
+  - 265k words/thread/sec during training 
+  - 74MB trained binary model size (45x smaller than training data)
 
-14.1GB text file (gs://codenames-gutenberg/actually_everything.sanitized_lowercase.txt)
-1M "vocab" words
-2.3B individual words
-51m24s to train on 24cpu
-300k words/thread/sec during training
-934M trained **text** model size (15x smaller than training data)
+- Training on a full set of Project Gutenberg books
+  - 14.1GB text file (https://drive.google.com/open?id=1XznyDoivL3kffjL-BcNLK-BSOpJQVF1c)
+  - 1M "vocab" words
+  - 2.3B individual words
+  - 51m24s to train on 24cpu
+  - 300k words/thread/sec during training
+  - 399M trained binary model size (35x smaller than training data)
