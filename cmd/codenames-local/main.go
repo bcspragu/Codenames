@@ -64,9 +64,9 @@ func main() {
 
 	switch teamMap[*starter] {
 	case codenames.RedTeam:
-		rop = ai
+		rsm = ai
 	case codenames.BlueTeam:
-		bop = ai
+		bsm = ai
 	}
 
 	cards := make([]codenames.Card, len(words))

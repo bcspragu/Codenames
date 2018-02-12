@@ -1,7 +1,6 @@
 package w2v
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,7 +13,7 @@ import (
 )
 
 type AI struct {
-	model *word2vec.Model
+	Model *word2vec.Model
 }
 
 // Init initializes the word2vec model.
@@ -33,12 +32,29 @@ func New(file string) (*AI, error) {
 	}
 
 	log.Println("Read w2v model")
-	return &AI{model: model}, nil
+	return &AI{Model: model}, nil
 }
 
-func (ai *AI) GiveClue(*codenames.Board) (*codenames.Clue, error) {
-	// TODO: Figure out an algorithm for generating clues.
-	return nil, errors.New("not implemented")
+func (ai *AI) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
+
+    bestScore := float32(-1.0)
+    clue := "???"
+
+    unused := codenames.Targets(b.Cards, codenames.RedAgent)
+    log.Print(unused)
+    for i := 0; i < len(unused); i++ {
+	      expr := word2vec.Expr{}
+          expr.Add(1, unused[i].Codename)
+          matches, _ := ai.Model.CosN(expr, 2)
+          match := matches[1]
+          log.Printf("%s = %s %f", unused[i], match.Word, match.Score)
+          if match.Score > bestScore {
+              bestScore = match.Score
+              clue = match.Word
+          }
+    }
+
+	return &codenames.Clue{Word: clue, Count: 1}, nil
 }
 
 func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
@@ -76,7 +92,7 @@ func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
 // Similarity returns a value from 0 to 1, that is the similarity of the two
 // input words.
 func (ai *AI) similarity(a, b string) (float32, error) {
-	s, err := ai.model.Cos(exp(strings.ToLower(a)), exp(strings.ToLower(b)))
+	s, err := ai.Model.Cos(exp(strings.ToLower(a)), exp(strings.ToLower(b)))
 	if err != nil {
 		return 0.0, fmt.Errorf("failed to determine similarity: %v", err)
 	}
