@@ -99,3 +99,47 @@ On GCE, 24cpu vs 2cpu -> ~10x improvement in speed.
   - 51m24s to train on 24cpu
   - 300k words/thread/sec during training
   - 399M trained binary model size (35x smaller than training data)
+
+### Wikipedia
+
+1. Get an XML dump from one of the [mirror sites](https://dumps.wikimedia.org/mirrors.html)
+https://wikimedia.bytemark.co.uk/ worked well for me. The XML dump file should be named something like "enwiki-20180201-pages-articles.xml.bz2" and be ~14GB (as of 2017). This is ~5M articles.
+
+2. Now we need to convert the XML dump into a more usable format. Fortunately, [gensim](https://radimrehurek.com/gensim/scripts/segment_wiki.html) provides a great tool for this as of v3.3.0:
+
+    ```
+    pip install gensim==3.3.0
+    ```
+
+3. And now we run the tool over the bzip'd input and produce a gzip'd output file:
+
+    ```
+    python -m gensim.scripts.segment_wiki -f enwiki-20180201-pages-articles.xml.bz2 -o enwiki.json.gz
+    ```
+
+    This resulted in a ~6GB gzip'd file (from an original 14GB bz2'd xml file) and took ~4 hours to run with --workes=3 (~7K articles/minute/worker)
+
+The output file consists of one article per line, where each line is a json object; each object contains (among other fields):
+
+    - title: string
+    - section_title: list of strings
+    - section_text: list of strings
+
+4. Since we only care about the section_text  we can use the `smart_open` package to read in the gzip'd file and save only the parts we care about.
+
+  ```
+  import codecs
+  import json
+  import smart_open
+
+  with codes.open('enwiki.txt', 'a+', encoding='utf_8') as output:
+    for line in smart_open.smart_open('enwiki.json.gz'):
+      article = json.loads(line)
+
+      for section_title, section_text in zip(article['section_titles'], article['section_texts']):
+        if section_title in ['See also', 'References', 'Further reading', 'External links', 'Footnotes', 'Bibliography', 'Notes']:
+          continue
+        output.write(section_text)
+  ```
+
+  This took ~15mins and produces a ~16GB uncompressed text file with ~2.6B words
