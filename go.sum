@@ -1,0 +1,4 @@
+code.sajari.com/word2vec v1.0.0 h1:gg1Bk3ea3mGPZMS2/qh1iPJM5iotSSHyIxq4gUdlH+0=
+code.sajari.com/word2vec v1.0.0/go.mod h1:Ut8mx+2Q79Js3uGW1+HtbuuUIWoGMAMCOZK06xDly00=
+github.com/ziutek/blas v0.0.0-20131112123631-58548894c23b h1:/UUwUD/l+89cShEHvtL3k5ZkVj/Ugabk+NFCp+R+8y0=
+github.com/ziutek/blas v0.0.0-20131112123631-58548894c23b/go.mod h1:J3xKssoVdrwZ2E29fIox/EKxOZWimS7AZ4fOTCFkOLo=
