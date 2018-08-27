@@ -14,6 +14,8 @@ Alpine image containing `npm` and `yarn`, then run the container.
 # Builds the container.
 $ ./build.sh
 $ cd frontend
+# You only need to run install.sh once.
+$ ./install.sh
 $ ./serve.sh
 ```
 
