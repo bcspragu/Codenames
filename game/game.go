@@ -17,7 +17,7 @@ type Game struct {
 
 // Config holds configuration options for a game of Codenames.
 type Config struct {
-	// Starter is the team that goese first
+	// Starter is the team that goes first.
 	Starter codenames.Team
 
 	RedSpymaster  codenames.Spymaster
