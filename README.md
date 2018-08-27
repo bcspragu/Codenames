@@ -143,3 +143,127 @@ The output file consists of one article per line, where each line is a json obje
   ```
 
   This took ~15mins and produces a ~16GB uncompressed text file with ~2.6B words
+
+## Design
+
+![Picture of Whiteboard Design](whiteboard_design.jpg)
+
+Keywords:
+
+ - Progressive Web App
+ - WebSockets
+ - Mobile UI
+ - SQLite DB
+ - Nginx Reverse Proxy, Docker web server, static folder of html/js/css
+ - Cookies
+ - Random combo of codenames words identifies the game for display
+
+### UI Screens
+
+1. Username
+
+A user goes to https://codenames.ai/# for the first time. They enter a 
+username. It can have all sorts of cool emojiis in it probably. We generate
+a cookie for the user and keep that in our DB.
+
+2. New Game / Join Game
+
+A button allows the user to create a new game.
+
+There will also be a list of names of existing games that the player can either
+join (if it hasn't started yet) or spectate.
+
+Games will be identified by a combination of a few codeanmes words (or other words
+I guess), so that the room names are pronounceable.
+
+3. Start Game
+
+When a new game is created, it's in a pending state. Players can go to the game
+in this state and join as either a spymaster (on either team) or as an operative.
+
+Probably only the person that clicked "New Game" can start the game.
+
+Any roles that aren't filled by humans will be automatically filled with AIs.
+
+A spymaster can be only a single person or AI. An operative can either be a single AI
+or multiple humans. (Human spymasters and operatives will be able to get "Hints" from
+an AI.) If there are multiple humans, then it will be first-click-first-serve for guessing.
+So that adds some fun.
+
+4. Active Game
+
+Spymaster will have a view showing them the board with all the cards highlighted
+in the right color, and indication of which words have already been guessed,
+an input for their next clue, and a way to get a hint/suggestion from the AI.
+
+Operatives will have a view showing them the board with the cards, some indication
+of which words have been guessed, and the current clue. The cards will be touchable.
+When a user touches a card, everyone will be able to see who touched which card.
+
+Spectators will have a very similar view to operatives, but it will be read-only.
+
+All the views should probably also clearly indicate who's turn it is, how many cards
+each team has left. Maybe some sort of history of the game.
+
+### Database
+
+A SQLite database should be hilariously sufficient for our needs, and it
+keeps it simple.
+
+- User Table
+    - UserId string  // related to the cookie
+    - DisplayName string
+
+- Game Table
+    - GameId string  // pronounce-able
+    - Status string  // enum: Pending, PLaying, PFinished
+    - State blob
+
+- GamePlayers Table
+    - GameId string
+    - UserId string
+    - Role string  // Spymaster, Operative
+    - Team string  // Red, Blue
+
+- GameHistory Table
+    - GameId string
+    - EventTimestamp timestamp
+    - Event blob
+
+
+### PWA API
+
+| Method | Path                 | Description                                                                   |
+|--------|----------------------|-------------------------------------------------------------------------------|
+| GET    | /                    | New users get the username page, existing users go to their most recent game. |
+| POST   | /register            | Update a user's username                                                      |
+| POST   | /game                | Generate a GameId                                                             |
+| GET    | /game/{GameId}       | Gets the info for the game. Game may be pending or in progress.               |
+| POST   | /game/{GameId}/start | Start a game. Player slots not filled by humans will be AIs                   |
+| POST   | /game/{GameId}/join  | Join a game as a role/team                                                    |
+| POST   | /game/{GameId}/clue  | Send a word/number clue as Spymaster                                          |
+| POST   | /game/{GameId}/guess | Send a card guess as an Operative                                             |
+
+
+### Web Server
+
+- Nginx reverse proxy to handle TLS and such.
+- Lets Encrypt because it's 2018
+- Static assets
+- Docker
+- The main webserver binary
+    - Websockets for nice updates to the PWA
+    - Talks to the DB
+    - Talks to the AI
+
+### Assorted Features and Nice-to-Haves
+
+- Fuzzing
+- AI hints for humans
+- AI trash talking when humans give clues & guesses.
+- A way for users to file feedback
+- Spectators are called "Taters" because that's funny
+- Supporting >1 human operative on a team (first come first serve for making a guess.)
+- AI can play has any combination of spymasters and operatives. It could be all AIs or no AIs.
+- Should like reasonable on mobile and on desktop. Would be cool to have a Cast App that shows
+  a spectator screen.
