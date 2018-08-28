@@ -57,6 +57,10 @@ func (s *Srv) initMux() *mux.Router {
 	return m
 }
 
+func (s *Srv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mux.ServeHTTP(w, r)
+}
+
 func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
 	return
 }
