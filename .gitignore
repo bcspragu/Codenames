@@ -1,4 +1,7 @@
 apiKey
+hashKey
+blockKey
+config
 data/*.bin
 data/words.txt
 cmd/codenames-local/codenames-local
