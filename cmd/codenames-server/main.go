@@ -25,7 +25,7 @@ func main() {
 	rand.Seed(time.Now().Unix())
 	flag.Parse()
 
-	db, err := sqldb.New("codenames.db", cryptoRandSource{})
+	db, err := sqldb.New("codenames.db", rand.New(cryptoRandSource{}))
 	if err != nil {
 		log.Fatalf("Failed to initialize datastore: %v", err)
 	}

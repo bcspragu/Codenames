@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/bcspragu/Codenames/db"
+	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/hub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -15,11 +15,11 @@ type Srv struct {
 	sc  *securecookie.SecureCookie
 	h   *hub.Hub
 	mux *mux.Router
-	db  db.DB
+	db  codenames.DB
 }
 
 // New returns an initialized server.
-func New(db db.DB) (*Srv, error) {
+func New(db codenames.DB) (*Srv, error) {
 	sc, err := loadKeys()
 	if err != nil {
 		return nil, err

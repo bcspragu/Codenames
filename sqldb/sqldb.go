@@ -1,13 +1,40 @@
 package sqldb
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/gob"
 	"errors"
 	"math/rand"
+	"os"
 
-	"github.com/bcspragu/Codenames/db"
+	codenames "github.com/bcspragu/Codenames"
 
 	_ "github.com/mattn/go-sqlite3"
+)
+
+var (
+	dbToGameStatus = map[string]codenames.GameStatus{
+		"Pending":   codenames.Pending,
+		"Playing":   codenames.Playing,
+		"PFinished": codenames.PFinished,
+	}
+	gameStatusToDB = map[codenames.GameStatus]string{
+		codenames.Pending:   "Pending",
+		codenames.Playing:   "Playing",
+		codenames.PFinished: "PFinished",
+	}
+)
+
+var (
+	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
+	createGameStmt = `INSERT INTO Games (id, status, state) VALUES (?, ?, ?)`
+	gameExistsStmt = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
+
+	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'Pending'`
+
+	joinGameStmt        = `INSERT INTO GamePlayers (game_id, user_id, role, team) VALUES (?, ?, ?, ?)`
+	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
 )
 
 // DB implements the Codenames database API, backed by a SQLite database.
@@ -18,11 +45,14 @@ type DB struct {
 	dbChan   chan func(*sql.DB)
 	doneChan chan struct{}
 	closeFn  func() error
-	src      rand.Source
+	r        *rand.Rand
 }
 
 // New creates a new *DB that is stored on disk at the given filename.
-func New(fn string, src rand.Source) (*DB, error) {
+func New(fn string, r *rand.Rand) (*DB, error) {
+	if _, err := os.Stat(fn); os.IsNotExist(err) {
+		return nil, errors.New("DB needs to be initialized")
+	}
 	sdb, err := sql.Open("sqlite3", fn)
 	if err != nil {
 		return nil, err
@@ -34,7 +64,7 @@ func New(fn string, src rand.Source) (*DB, error) {
 		closeFn: func() error {
 			return sdb.Close()
 		},
-		src: src,
+		r: r,
 	}
 	go db.run(sdb)
 	return db, nil
@@ -59,18 +89,91 @@ func (s *DB) Close() error {
 	return s.closeFn()
 }
 
-func (s *DB) NewGame(_ *db.Game) (db.GameID, error) {
-	return db.GameID(""), errors.New("not implemented")
+func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
+	type result struct {
+		id  codenames.GameID
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		tx, err := sdb.Begin()
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		defer tx.Rollback()
+
+		id, err := s.uniqueID(tx)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		gsb, err := gameStateBytes(g.State)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		_, err = tx.Exec(createGameStmt, string(id), codenames.Pending, gsb)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		resChan <- &result{id: id}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return codenames.GameID(""), res.err
+	}
+	return res.id, nil
 }
 
-func (s *DB) NewUser(_ *db.User) (db.UserID, error) {
-	return db.UserID(""), errors.New("not implemented")
+func (s *DB) NewUser(_ *codenames.User) (codenames.UserID, error) {
+	return codenames.UserID(""), codenames.ErrOperationNotImplemented
 }
 
-func (s *DB) JoinGame(_ db.GameID, _ *db.JoinRequest) error {
-	return errors.New("not implemented")
+func (s *DB) PendingGames() ([]codenames.GameID, error) {
+	return nil, codenames.ErrOperationNotImplemented
 }
 
-func (s *DB) UpdateState(_ db.GameID, _ *db.GameState) error {
-	return errors.New("not implemented")
+func (s *DB) JoinGame(_ codenames.GameID, _ *codenames.JoinRequest) error {
+	return codenames.ErrOperationNotImplemented
+}
+
+func (s *DB) UpdateState(_ codenames.GameID, _ *codenames.GameState) error {
+	return codenames.ErrOperationNotImplemented
+}
+
+func (s *DB) uniqueID(tx *sql.Tx) (codenames.GameID, error) {
+	i := 0
+	var id string
+	for {
+		id = codenames.RandomGameID(s.r)
+		var n int
+		if err := tx.QueryRow(gameExistsStmt, id).Scan(&n); err != nil {
+			return codenames.GameID(""), err
+		}
+		if n == 0 {
+			break
+		}
+		i++
+		if i >= 100 {
+			return codenames.GameID(""), errors.New("tried 100 random IDs, all were taken, which seems fishy")
+		}
+	}
+	return codenames.GameID(id), nil
+}
+
+func gameStateBytes(s *codenames.GameState) ([]byte, error) {
+	var buf bytes.Buffer
+	err := gob.NewEncoder(&buf).Encode(&s)
+	return buf.Bytes(), err
 }

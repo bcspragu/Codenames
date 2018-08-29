@@ -1,6 +1,6 @@
-package boardgen
+package codenames
 
-var words = []string{
+var Words = []string{
 	"africa",
 	"agent",
 	"air",

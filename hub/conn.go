@@ -3,7 +3,8 @@ package hub
 import (
 	"time"
 
-	"github.com/bcspragu/Codenames/db"
+	codenames "github.com/bcspragu/Codenames"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -26,7 +27,7 @@ type connection struct {
 	id string
 	h  *Hub
 	// What room this connection is associated with.
-	gameID db.GameID
+	gameID codenames.GameID
 	// The websocket connection.
 	ws *websocket.Conn
 

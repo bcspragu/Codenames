@@ -50,7 +50,7 @@ func New(starter codenames.Team) *codenames.Board {
 
 	// Pick words at random from our list.
 	for len(used) < codenames.Size {
-		used[words[rand.Intn(len(words))]] = struct{}{}
+		used[codenames.Words[rand.Intn(len(codenames.Words))]] = struct{}{}
 	}
 
 	var selected []string

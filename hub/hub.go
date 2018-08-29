@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/bcspragu/Codenames/db"
+	codenames "github.com/bcspragu/Codenames"
 	"github.com/gorilla/websocket"
 )
 
@@ -12,7 +12,7 @@ import (
 // connections.
 type Hub struct {
 	// Registered connections.
-	connections map[db.GameID][]*connection
+	connections map[codenames.GameID][]*connection
 
 	// Inbound messages from the connections.
 	broadcast chan *broadcastMsg
@@ -30,7 +30,7 @@ func New() *Hub {
 		broadcast:   make(chan *broadcastMsg),
 		register:    make(chan *connection),
 		unregister:  make(chan *connection),
-		connections: make(map[db.GameID][]*connection),
+		connections: make(map[codenames.GameID][]*connection),
 	}
 	go h.run()
 	return h
@@ -71,12 +71,12 @@ func (h *Hub) deleteConn(c *connection) {
 }
 
 type broadcastMsg struct {
-	gameID db.GameID
+	gameID codenames.GameID
 	msg    []byte
 }
 
 // BroadcastGame sends a message to everyone in a game.
-func (h *Hub) BroadcastGame(msg []byte, gID db.GameID) {
+func (h *Hub) BroadcastGame(msg []byte, gID codenames.GameID) {
 	h.broadcast <- &broadcastMsg{
 		gameID: gID,
 		msg:    msg,
@@ -84,13 +84,13 @@ func (h *Hub) BroadcastGame(msg []byte, gID db.GameID) {
 }
 
 // Register associates a connection with the hub and a given game.
-func (h *Hub) Register(ws *websocket.Conn, gID db.GameID) {
+func (h *Hub) Register(ws *websocket.Conn, gID codenames.GameID) {
 	conn := &connection{id: newID(gID), h: h, gameID: gID, send: make(chan []byte, 256), ws: ws}
 	h.register <- conn
 	go conn.writePump()
 	go conn.readPump()
 }
 
-func newID(gID db.GameID) string {
+func newID(gID codenames.GameID) string {
 	return fmt.Sprintf("%s-%d", gID, rand.Int63())
 }

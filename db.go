@@ -1,17 +1,15 @@
-package db
+package codenames
 
 import (
+	"bytes"
 	"errors"
-
-	codenames "github.com/bcspragu/Codenames"
+	"math/rand"
 )
 
 var (
-	ErrOperationNotImplemented = errors.New("radiotation: operation not implemented")
-	ErrUserNotFound            = errors.New("radiotation: user not found")
-	ErrRoomNotFound            = errors.New("radiotation: room not found")
-	ErrQueueNotFound           = errors.New("radiotation: queue not found")
-	ErrNoTracksInQueue         = errors.New("radiotation: no tracks in queue")
+	ErrOperationNotImplemented = errors.New("codenames: operation not implemented")
+	ErrUserNotFound            = errors.New("codenames: user not found")
+	ErrGameNotFound            = errors.New("codenames: game not found")
 )
 
 type UserID string
@@ -30,22 +28,13 @@ const (
 	PFinished
 )
 
-type Team int
-
-const (
-	// NoTeam is an error case.
-	NoTeam Team = iota
-	RedTeam
-	BlueTeam
-)
-
 type Role int
 
 const (
 	// NoRole is an error case.
 	NoRole Role = iota
-	Spymaster
-	Operative
+	SpymasterRole
+	OperativeRole
 )
 
 type User struct {
@@ -58,13 +47,13 @@ type User struct {
 type Game struct {
 	ID     GameID
 	Status GameStatus
-	State  GameState
+	State  *GameState
 }
 
 type GameState struct {
 	ActiveTeam Team
 	ActiveRole Role
-	Board      *codenames.Board
+	Board      *Board
 }
 
 type JoinRequest struct {
@@ -77,6 +66,19 @@ type DB interface {
 	NewGame(*Game) (GameID, error)
 	NewUser(*User) (UserID, error)
 
+	PendingGames() ([]GameID, error)
 	JoinGame(GameID, *JoinRequest) error
 	UpdateState(GameID, *GameState) error
+}
+
+func RandomGameID(r *rand.Rand) string {
+	var buf bytes.Buffer
+	for i := 0; i < 3; i++ {
+		buf.WriteString(randomWord(r))
+	}
+	return buf.String()
+}
+
+func randomWord(r *rand.Rand) string {
+	return Words[r.Intn(len(Words))]
 }

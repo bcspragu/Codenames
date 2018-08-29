@@ -2,6 +2,7 @@ apiKey
 hashKey
 blockKey
 config
+codenames.db
 data/*.bin
 data/words.txt
 cmd/codenames-local/codenames-local
