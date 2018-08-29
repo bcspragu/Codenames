@@ -17,7 +17,7 @@ schema:
     extensions:
     - go
     paths:
-    - /../..
+    - /
     ignored_paths:
     - .git
     - .realize
