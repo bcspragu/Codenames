@@ -37,22 +37,22 @@ func New(file string) (*AI, error) {
 
 func (ai *AI) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
 
-    bestScore := float32(-1.0)
-    clue := "???"
+	bestScore := float32(-1.0)
+	clue := "???"
 
-    unused := codenames.Targets(b.Cards, codenames.RedAgent)
-    log.Print(unused)
-    for i := 0; i < len(unused); i++ {
-	      expr := word2vec.Expr{}
-          expr.Add(1, unused[i].Codename)
-          matches, _ := ai.Model.CosN(expr, 2)
-          match := matches[1]
-          log.Printf("%s = %s %f", unused[i], match.Word, match.Score)
-          if match.Score > bestScore {
-              bestScore = match.Score
-              clue = match.Word
-          }
-    }
+	unused := codenames.Targets(b.Cards, codenames.RedAgent)
+	log.Print(unused)
+	for i := 0; i < len(unused); i++ {
+		expr := word2vec.Expr{}
+		expr.Add(1, unused[i].Codename)
+		matches, _ := ai.Model.CosN(expr, 2)
+		match := matches[1]
+		log.Printf("%v = %s %f", unused[i], match.Word, match.Score)
+		if match.Score > bestScore {
+			bestScore = match.Score
+			clue = match.Word
+		}
+	}
 
 	return &codenames.Clue{Word: clue, Count: 1}, nil
 }

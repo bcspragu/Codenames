@@ -8,8 +8,8 @@ import (
 	"io"
 	"sort"
 
+	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/dict"
-	"github.com/bcspragu/Codenames/types"
 	"golang.org/x/net/context"
 	"google.golang.org/api/option"
 
@@ -36,7 +36,7 @@ func New(ctx context.Context, opts ...option.ClientOption) (*Converter, error) {
 }
 
 // BoardFromReader reads an image and extracts a board from it.
-func (c *Converter) BoardFromReader(ctx context.Context, r io.Reader) (*types.Board, error) {
+func (c *Converter) BoardFromReader(ctx context.Context, r io.Reader) (*codenames.Board, error) {
 	img, err := vision.NewImageFromReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read img from reader: %v", err)
@@ -77,7 +77,7 @@ func filterByHeight(annos []*visionpb.EntityAnnotation) []*visionpb.EntityAnnota
 			hm[ht] = append(hm[ht], an)
 		}
 		for _, ans := range hm {
-			if len(ans) >= types.Size {
+			if len(ans) >= codenames.Size {
 				validAnnos = ans
 				break
 			}
@@ -101,16 +101,16 @@ func filterByCenters(annos []*visionpb.EntityAnnotation) []*visionpb.EntityAnnot
 		}
 		var vx, vy []int
 		for x, ans := range xm {
-			if len(ans) == types.Rows {
+			if len(ans) == codenames.Rows {
 				vx = append(vx, x)
 			}
 		}
 		for y, ans := range ym {
-			if len(ans) == types.Columns {
+			if len(ans) == codenames.Columns {
 				vy = append(vy, y)
 			}
 		}
-		if len(vx) == types.Columns && len(vy) == types.Rows {
+		if len(vx) == codenames.Columns && len(vy) == codenames.Rows {
 			sort.Ints(vx)
 			sort.Ints(vy)
 			for _, y := range vy {
@@ -130,12 +130,12 @@ func filterByCenters(annos []*visionpb.EntityAnnotation) []*visionpb.EntityAnnot
 	return validAnnos
 }
 
-func annosToBoard(annos []*visionpb.EntityAnnotation) *types.Board {
-	cns := make([]types.Codename, len(annos))
+func annosToBoard(annos []*visionpb.EntityAnnotation) *codenames.Board {
+	cds := make([]codenames.Card, len(annos))
 	for i, an := range annos {
-		cns[i].Name = an.Description
+		cds[i].Codename = an.Description
 	}
-	return &types.Board{Codenames: cns}
+	return &codenames.Board{Cards: cds}
 }
 
 func round(x, nearest int) int {

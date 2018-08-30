@@ -26,16 +26,16 @@ func main() {
 	)
 	flag.Parse()
 
-    if *modelFile == "" {
-      fmt.Println("ERROR: You need to pass in a --model_file.")
-      return
-    }
+	if *modelFile == "" {
+		fmt.Println("ERROR: You need to pass in a --model_file.")
+		return
+	}
 
 	var words []string
 	if *wordList == "" {
 		content, err := ioutil.ReadFile(*wordFile)
 		if err != nil {
-			fmt.Println("Could not read %s: %s", wordFile, err)
+			fmt.Printf("Could not read %s: %s\n", *wordFile, err)
 		}
 		words = strings.Split(string(content), "\n")
 	} else {
@@ -45,7 +45,7 @@ func main() {
 
 	ai, err := w2v.New(*modelFile)
 	if err != nil {
-		fmt.Println("Failed to read in %s", modelFile)
+		fmt.Printf("Failed to read in %s\n", *modelFile)
 	}
 	model := ai.Model
 
@@ -97,5 +97,5 @@ func topNOmitSubstringMatches(model *word2vec.Model, expr word2vec.Expr, topN in
 		n *= 2
 	}
 
-    return valid_matches[:topN], nil
+	return valid_matches[:topN], nil
 }

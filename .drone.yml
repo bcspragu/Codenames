@@ -1,0 +1,15 @@
+pipeline:
+  backend:
+    group: build
+    image: golang:1.11
+    commands:
+      - go build github.com/bcspragu/Codenames/cmd/codenames-server
+      - go test ./...
+  frontend:
+    group: build
+    image: docker.bsprague.com/node
+    commands:
+      - cd web/frontend
+      - yarn build
+
+branches: master
