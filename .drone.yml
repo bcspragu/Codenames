@@ -12,5 +12,12 @@ pipeline:
       - cd web/frontend
       - yarn
       - yarn build
+  scp:
+    image: appleboy/drone-scp
+    host: prod.bsprague.com
+    secrets: [ ssh_username, ssh_key ]
+    target: /var/www/codenames.ai
+    source: web/frontend/dist/*
+    rm: true
 
 branches: master

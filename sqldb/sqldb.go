@@ -136,8 +136,45 @@ func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
 	return res.id, nil
 }
 
-func (s *DB) NewUser(_ *codenames.User) (codenames.UserID, error) {
-	return codenames.UserID(""), codenames.ErrOperationNotImplemented
+func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
+	type result struct {
+		id  codenames.UserID
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		tx, err := sdb.Begin()
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		defer tx.Rollback()
+
+		id := codenames.RandomUserID(s.r)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		_, err = tx.Exec(createUserStmt, string(id), u.Name)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		resChan <- &result{id: id}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return codenames.UserID(""), res.err
+	}
+	return res.id, nil
 }
 
 func (s *DB) PendingGames() ([]codenames.GameID, error) {
@@ -154,7 +191,7 @@ func (s *DB) UpdateState(_ codenames.GameID, _ *codenames.GameState) error {
 
 func (s *DB) uniqueID(tx *sql.Tx) (codenames.GameID, error) {
 	i := 0
-	var id string
+	var id codenames.GameID
 	for {
 		id = codenames.RandomGameID(s.r)
 		var n int
@@ -169,7 +206,7 @@ func (s *DB) uniqueID(tx *sql.Tx) (codenames.GameID, error) {
 			return codenames.GameID(""), errors.New("tried 100 random IDs, all were taken, which seems fishy")
 		}
 	}
-	return codenames.GameID(id), nil
+	return id, nil
 }
 
 func gameStateBytes(s *codenames.GameState) ([]byte, error) {

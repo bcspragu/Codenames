@@ -71,12 +71,22 @@ type DB interface {
 	UpdateState(GameID, *GameState) error
 }
 
-func RandomGameID(r *rand.Rand) string {
+func RandomGameID(r *rand.Rand) GameID {
 	var buf bytes.Buffer
 	for i := 0; i < 3; i++ {
 		buf.WriteString(randomWord(r))
 	}
-	return buf.String()
+	return GameID(buf.String())
+}
+
+var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+func RandomUserID(r *rand.Rand) UserID {
+	b := make([]byte, 64)
+	for i := range b {
+		b[i] = letters[r.Intn(len(letters))]
+	}
+	return UserID(b)
 }
 
 func randomWord(r *rand.Rand) string {
