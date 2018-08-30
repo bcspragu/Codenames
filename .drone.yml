@@ -19,5 +19,6 @@ pipeline:
     target: /var/www/codenames.ai
     source: web/frontend/dist/*
     rm: true
+    strip_components: 3
 
 branches: master
