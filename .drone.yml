@@ -10,6 +10,7 @@ pipeline:
     image: docker.bsprague.com/node
     commands:
       - cd web/frontend
+      - yarn
       - yarn build
 
 branches: master
