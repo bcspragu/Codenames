@@ -1,2 +1,2 @@
-addr :8081
+addr :8080
 db_path /app/data/codenames.db
