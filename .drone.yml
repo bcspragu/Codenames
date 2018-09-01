@@ -16,6 +16,12 @@ pipeline:
       - yarn build
     volumes:
       - /tmp/nodecache:/drone/src/github.com/bcspragu/Codenames/web/frontend/node_modules
+  docker:
+    image: plugins/docker
+    repo: docker.bsprague.com/codenames
+    registry: docker.bsprague.com
+    secrets: [ docker_username, docker_password ]
+    dockerfile: cmd/codenames-server/Dockerfile
   scp:
     image: appleboy/drone-scp
     host: prod.bsprague.com
