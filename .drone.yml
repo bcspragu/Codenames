@@ -3,8 +3,10 @@ pipeline:
     group: build
     image: golang:1.11
     commands:
-      - go build github.com/bcspragu/Codenames/cmd/codenames-server
+      - go build -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
       - go test ./...
+    volumes:
+      - /tmp/gocache:/go/pkg/mod
   frontend:
     group: build
     image: docker.bsprague.com/node
@@ -12,6 +14,8 @@ pipeline:
       - cd web/frontend
       - yarn
       - yarn build
+    volumes:
+      - /tmp/nodecache:/drone/src/github.com/bcspragu/Codenames/web/frontend/node_modules
   scp:
     image: appleboy/drone-scp
     host: prod.bsprague.com
