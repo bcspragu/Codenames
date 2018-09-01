@@ -19,7 +19,7 @@ import (
 func main() {
 	var (
 		_      = flag.String(flag.DefaultConfigFlagname, "config", "Path to config file")
-		addr   = flag.String("addr", ":8080", "HTTP service address")
+		addr   = flag.String("addr", ":8081", "HTTP service address")
 		dbPath = flag.String("db_path", "codenames.db", "Path to the SQLite DB file")
 	)
 
