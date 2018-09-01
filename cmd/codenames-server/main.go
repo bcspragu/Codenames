@@ -18,14 +18,15 @@ import (
 
 func main() {
 	var (
-		_    = flag.String(flag.DefaultConfigFlagname, "config", "Path to config file")
-		addr = flag.String("addr", ":8080", "HTTP service address")
+		_      = flag.String(flag.DefaultConfigFlagname, "config", "Path to config file")
+		addr   = flag.String("addr", ":8080", "HTTP service address")
+		dbPath = flag.String("db_path", "codenames.db", "Path to the SQLite DB file")
 	)
 
 	rand.Seed(time.Now().Unix())
 	flag.Parse()
 
-	db, err := sqldb.New("codenames.db", rand.New(cryptoRandSource{}))
+	db, err := sqldb.New(*dbPath, rand.New(cryptoRandSource{}))
 	if err != nil {
 		log.Fatalf("Failed to initialize datastore: %v", err)
 	}
