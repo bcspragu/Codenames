@@ -22,6 +22,7 @@ pipeline:
     registry: docker.bsprague.com
     secrets: [ docker_username, docker_password ]
     dockerfile: cmd/codenames-server/Dockerfile
+    context: cmd/codenames-server/
   scp:
     image: appleboy/drone-scp
     host: prod.bsprague.com
