@@ -24,6 +24,7 @@ pipeline:
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
   scp:
+    group: deploy
     image: appleboy/drone-scp
     host: prod.bsprague.com
     secrets: [ ssh_username, ssh_key ]
@@ -31,5 +32,12 @@ pipeline:
     source: web/frontend/dist/*
     rm: true
     strip_components: 3
+  ssh:
+    group: deploy
+    image: appleboy/drone-ssh
+    host: prod.bsprague.com
+    secrets: [ ssh_username, ssh_key ]
+    script:
+      - sudo systemctl restart codenames.service
 
 branches: master
