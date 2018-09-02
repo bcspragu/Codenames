@@ -3,7 +3,7 @@ pipeline:
     group: build
     image: golang:1.11
     commands:
-      - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+      - GOCACHE=/go/pkg/mod/go-build CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
       - go test ./...
     volumes:
       - /tmp/gocache:/go/pkg/mod
