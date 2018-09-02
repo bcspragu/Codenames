@@ -2,7 +2,6 @@ package boardgen
 
 import (
 	"math/rand"
-	"time"
 
 	codenames "github.com/bcspragu/Codenames"
 )
@@ -34,9 +33,7 @@ var baseAgents = []codenames.Agent{
 	codenames.Assassin,
 }
 
-func New(starter codenames.Team) *codenames.Board {
-	rand.Seed(time.Now().UnixNano())
-
+func New(starter codenames.Team, r *rand.Rand) *codenames.Board {
 	used := make(map[string]struct{})
 	agents := make([]codenames.Agent, len(baseAgents))
 	copy(agents, baseAgents)
@@ -50,7 +47,7 @@ func New(starter codenames.Team) *codenames.Board {
 
 	// Pick words at random from our list.
 	for len(used) < codenames.Size {
-		used[codenames.Words[rand.Intn(len(codenames.Words))]] = struct{}{}
+		used[codenames.Words[r.Intn(len(codenames.Words))]] = struct{}{}
 	}
 
 	var selected []string
@@ -59,7 +56,7 @@ func New(starter codenames.Team) *codenames.Board {
 	}
 
 	var cards []codenames.Card
-	for i, idx := range rand.Perm(len(agents)) {
+	for i, idx := range r.Perm(len(agents)) {
 		cards = append(cards, codenames.Card{
 			Agent:    agents[idx],
 			Codename: selected[i],

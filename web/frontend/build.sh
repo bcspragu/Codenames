@@ -1,2 +1,2 @@
 #!/bin/bash
-docker run --rm -it -p 8081:8081 -v $PWD:/project node-env yarn build
+docker run --rm -it -v $PWD:/project node-env yarn build

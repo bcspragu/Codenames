@@ -5,6 +5,7 @@ require (
 	code.sajari.com/word2vec v1.0.0
 	contrib.go.opencensus.io/exporter/stackdriver v0.6.0 // indirect
 	github.com/golang/protobuf v1.2.0 // indirect
+	github.com/google/go-cmp v0.2.0
 	github.com/googleapis/gax-go v2.0.0+incompatible // indirect
 	github.com/gorilla/mux v1.6.2
 	github.com/gorilla/securecookie v1.1.1

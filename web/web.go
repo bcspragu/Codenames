@@ -1,11 +1,17 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
+	"log"
+	"math"
+	"math/rand"
 	"net/http"
 
 	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/boardgen"
 	"github.com/bcspragu/Codenames/hub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -16,10 +22,11 @@ type Srv struct {
 	h   *hub.Hub
 	mux *mux.Router
 	db  codenames.DB
+	r   *rand.Rand
 }
 
 // New returns an initialized server.
-func New(db codenames.DB) (*Srv, error) {
+func New(db codenames.DB, r *rand.Rand) (*Srv, error) {
 	sc, err := loadKeys()
 	if err != nil {
 		return nil, err
@@ -29,6 +36,7 @@ func New(db codenames.DB) (*Srv, error) {
 		sc: sc,
 		h:  hub.New(),
 		db: db,
+		r:  r,
 	}
 
 	s.mux = s.initMux()
@@ -50,6 +58,9 @@ func (s *Srv) initMux() *mux.Router {
 	m.HandleFunc("/api/game/{id}/clue", s.serveClue).Methods("POST")
 	// Serve a card guess to a game.
 	m.HandleFunc("/api/game/{id}/guess", s.serveGuess).Methods("POST")
+
+	// TODO(bcspragu): Remove this handler, it's just for testing HTTP requests.
+	m.HandleFunc("/api/newBoard", s.serveBoard).Methods("GET")
 
 	// WebSocket handler for games.
 	m.HandleFunc("/api/game/{id}/ws", s.serveData).Methods("GET")
@@ -87,6 +98,44 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request) {
 
 func (s *Srv) serveData(w http.ResponseWriter, r *http.Request) {
 
+}
+
+type jsBoard struct {
+	Cards [][]codenames.Card
+}
+
+func (s *Srv) serveBoard(w http.ResponseWriter, r *http.Request) {
+	b, err := toJSBoard(boardgen.New(codenames.RedTeam, s.r))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(b); err != nil {
+		log.Printf("serveBoard: %v", err)
+	}
+}
+
+func toJSBoard(b *codenames.Board) (*jsBoard, error) {
+	sz, ok := sqrt(len(b.Cards))
+	if !ok {
+		return nil, fmt.Errorf("%d cards is not a square board", len(b.Cards))
+	}
+
+	cds := make([][]codenames.Card, sz)
+	for i := 0; i < sz; i++ {
+		cds[i] = b.Cards[i*sz : (i+1)*sz]
+	}
+	return &jsBoard{Cards: cds}, nil
+}
+
+func sqrt(i int) (int, bool) {
+	rt := math.Floor(math.Sqrt(float64(i)))
+	if int(rt*rt) != i {
+		return 0, false
+	}
+	return int(rt), true
 }
 
 func loadKeys() (*securecookie.SecureCookie, error) {

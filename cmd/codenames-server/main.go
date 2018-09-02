@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/bcspragu/Codenames/sqldb"
 	"github.com/bcspragu/Codenames/web"
@@ -23,15 +22,15 @@ func main() {
 		dbPath = flag.String("db_path", "codenames.db", "Path to the SQLite DB file")
 	)
 
-	rand.Seed(time.Now().Unix())
 	flag.Parse()
 
-	db, err := sqldb.New(*dbPath, rand.New(cryptoRandSource{}))
+	r := rand.New(cryptoRandSource{})
+	db, err := sqldb.New(*dbPath, r)
 	if err != nil {
 		log.Fatalf("Failed to initialize datastore: %v", err)
 	}
 
-	srv, err := web.New(db)
+	srv, err := web.New(db, r)
 	if err != nil {
 		log.Fatalf("Failed to initialize server: %v", err)
 	}

@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
+	"time"
 
 	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/boardgen"
@@ -18,8 +20,9 @@ var (
 )
 
 func main() {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	// For now, assume Red Team goes first.
-	bd := boardgen.New(codenames.RedTeam)
+	bd := boardgen.New(codenames.RedTeam, r)
 
 	var buf bytes.Buffer
 	for i, card := range bd.Cards {
