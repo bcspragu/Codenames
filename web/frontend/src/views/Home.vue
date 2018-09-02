@@ -33,3 +33,9 @@ export default class Home extends Vue {
   }
 }
 </script>
+
+<style scoped lang="scss">
+.home {
+  height: 100%;
+}
+</style>
