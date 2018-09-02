@@ -82,7 +82,7 @@ time find . -regex "./1/1/.*/[0-9]+\.txt" -print0 | xargs -0 -I {} sh -c "cat {}
 ```
 
 
-On GCE, 24cpu vs 2cpu -> ~10x improvement in speed.
+On GCE, 24 CPUs vs 2 CPUs -> ~10x improvement in speed.
 
 - Training on a partial set of Project Gutenberg books
   - 3.4GB text file
@@ -96,7 +96,7 @@ On GCE, 24cpu vs 2cpu -> ~10x improvement in speed.
   - 14.1GB text file (https://drive.google.com/open?id=1XznyDoivL3kffjL-BcNLK-BSOpJQVF1c)
   - 1M "vocab" words
   - 2.3B individual words
-  - 51m24s to train on 24cpu
+  - 51m24s to train on 24 CPUs
   - 300k words/thread/sec during training
   - 399M trained binary model size (35x smaller than training data)
 
@@ -142,7 +142,7 @@ The output file consists of one article per line, where each line is a json obje
         output.write(section_text)
   ```
 
-  This took ~15mins and produces a ~16GB uncompressed text file with ~2.6B words
+  This took ~15 mins and produces a ~16GB uncompressed text file with ~2.6B words
 
 ## Design
 
@@ -154,7 +154,7 @@ Keywords:
  - WebSockets
  - Mobile UI
  - SQLite DB
- - Nginx Reverse Proxy, Docker web server, static folder of html/js/css
+ - NGINX Reverse Proxy, Docker web server, static folder of html/js/css
  - Cookies
  - Random combo of codenames words identifies the game for display
 
@@ -162,9 +162,9 @@ Keywords:
 
 1. Username
 
-A user goes to https://codenames.ai/# for the first time. They enter a 
-username. It can have all sorts of cool emojiis in it probably. We generate
-a cookie for the user and keep that in our DB.
+A user goes to https://codenames.ai/# for the first time. They enter a
+username. It can have all sorts of cool emojis in it probably. We generate a
+cookie for the user and keep that in our DB.
 
 2. New Game / Join Game
 
