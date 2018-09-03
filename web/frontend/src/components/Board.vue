@@ -1,12 +1,8 @@
 <template>
-  <div class="container">
-    <div class="columns is-mobile is-centered is-gapless">
-      <div class="column is-12-mobile is-8-desktop">
-        <div class="row columns is-mobile is-gapless is-centered" v-for="row in board.Cards">
-          <div class="column cell" v-for="cell in row">
-            <div class="body is-size-6 is-size-7-mobile" :class="color(cell)">{{format(cell.Codename)}}</div>
-          </div>
-        </div>
+  <div>
+    <div class="row columns is-mobile is-gapless is-centered" v-for="row in board.Cards">
+      <div class="column cell" v-for="cell in row">
+        <div class="body is-size-6 is-size-7-mobile" :class="color(cell)">{{format(cell.Codename)}}</div>
       </div>
     </div>
   </div>
@@ -40,12 +36,6 @@ export default class Board extends Vue {
 </script>
 
 <style scoped lang="scss">
-.container {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
 
 .row.columns {
   margin-bottom: 0.6rem;

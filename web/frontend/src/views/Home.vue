@@ -1,6 +1,10 @@
 <template>
-  <div class="home has-text-centered">
-    <Board :board="board"/>
+  <div class="container">
+    <div class="columns is-mobile is-centered is-gapless">
+      <div class="column is-12-mobile is-8-desktop">
+        <Board :board="board"/>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -35,7 +39,10 @@ export default class Home extends Vue {
 </script>
 
 <style scoped lang="scss">
-.home {
+.container {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 </style>
