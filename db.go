@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math/rand"
+	"strings"
 )
 
 var (
@@ -90,5 +91,5 @@ func RandomUserID(r *rand.Rand) UserID {
 }
 
 func randomWord(r *rand.Rand) string {
-	return Words[r.Intn(len(Words))]
+	return strings.Title(Words[r.Intn(len(Words))])
 }

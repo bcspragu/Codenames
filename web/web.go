@@ -48,6 +48,8 @@ func (s *Srv) initMux() *mux.Router {
 	m := mux.NewRouter()
 	// New game.
 	m.HandleFunc("/api/game", s.serveCreateGame).Methods("POST")
+	// Pending games.
+	m.HandleFunc("/api/games", s.servePendingGames).Methods("GET")
 	// Get game.
 	m.HandleFunc("/api/game/{id}", s.serveGame).Methods("GET")
 	// Join game.
@@ -73,7 +75,40 @@ func (s *Srv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
-	return
+	ar := codenames.RedTeam
+	if s.r.Intn(2) == 0 {
+		ar = codenames.BlueTeam
+	}
+
+	id, err := s.db.NewGame(&codenames.Game{
+		State: &codenames.GameState{
+			ActiveTeam: ar,
+			ActiveRole: codenames.SpymasterRole,
+			Board:      boardgen.New(ar, s.r),
+		},
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(struct{ ID string }{string(id)}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) {
+	gIDs, err := s.db.PendingGames()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(gIDs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) {

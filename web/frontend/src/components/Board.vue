@@ -10,7 +10,16 @@
 
 <script lang="ts">
 import { Component, Prop, Vue } from 'vue-property-decorator';
-import { GameBoard, Card } from '@/views/Home.vue';
+
+export interface Card {
+  Codename: string;
+  Agent: number;
+  Revealed: boolean;
+}
+
+export interface GameBoard {
+  Cards: Card[][];
+}
 
 @Component
 export default class Board extends Vue {

@@ -2,7 +2,20 @@
   <div class="container">
     <div class="columns is-mobile is-centered is-gapless">
       <div class="column is-12-mobile is-8-desktop">
-        <Board :board="board"/>
+        <button @click="newGame" class="button is-large is-fullwidth">New Game</button>
+      </div>
+    </div>
+    <hr>
+    <div class="columns is-mobile is-centered is-gapless">
+      <div class="column is-12-mobile is-8-desktop">
+        <div class="has-text-centered is-size-4">Pending Games</div>
+        <div class="game-list columns is-mobile is-centered is-gapless">
+          <div class="column is-8-mobile is-4-desktop has-text-centered">
+            <div v-for="id in gameIDs">
+              <router-link :to="{ name: 'game', params: { id: id }}">{{id}}</router-link>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -10,29 +23,20 @@
 
 <script lang="ts">
 import { Component, Vue } from 'vue-property-decorator';
-import Board from '@/components/Board.vue'; // @ is an alias to /src
 
-export interface Card {
-  Codename: string;
-  Agent: number;
-  Revealed: boolean;
-}
-
-export interface GameBoard {
-  Cards: Card[][];
-}
-
-@Component({
-  components: {
-    Board,
-  },
-})
+@Component
 export default class Home extends Vue {
-  private board: GameBoard = {Cards: []};
+  private gameIDs: string[] = [];
 
   private created(): void {
-    this.axios.get('/api/newBoard').then((resp) => {
-      this.board = resp.data;
+    this.axios.get('/api/games').then((resp) => {
+      this.gameIDs = resp.data;
+    });
+  }
+
+  private newGame(): void {
+    this.axios.post('/api/game').then((resp) => {
+      this.$router.push({ name: 'game', params: { id: resp.data.ID }});
     });
   }
 }
@@ -44,5 +48,9 @@ export default class Home extends Vue {
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+.game-list {
+  margin-top: 0.75rem;
 }
 </style>

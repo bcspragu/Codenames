@@ -31,7 +31,7 @@ var (
 	createGameStmt = `INSERT INTO Games (id, status, state) VALUES (?, ?, ?)`
 	gameExistsStmt = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
 
-	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'Pending'`
+	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 1 ORDER BY id`
 
 	joinGameStmt        = `INSERT INTO GamePlayers (game_id, user_id, role, team) VALUES (?, ?, ?, ?)`
 	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
@@ -144,29 +144,13 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 
 	resChan := make(chan *result)
 	s.dbChan <- func(sdb *sql.DB) {
-		tx, err := sdb.Begin()
-		if err != nil {
-			resChan <- &result{err: err}
-			return
-		}
-		defer tx.Rollback()
-
 		id := codenames.RandomUserID(s.r)
+		_, err := sdb.Exec(createUserStmt, string(id), u.Name)
 		if err != nil {
 			resChan <- &result{err: err}
 			return
 		}
 
-		_, err = tx.Exec(createUserStmt, string(id), u.Name)
-		if err != nil {
-			resChan <- &result{err: err}
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			resChan <- &result{err: err}
-			return
-		}
 		resChan <- &result{id: id}
 	}
 
@@ -178,7 +162,43 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 }
 
 func (s *DB) PendingGames() ([]codenames.GameID, error) {
-	return nil, codenames.ErrOperationNotImplemented
+	type result struct {
+		ids []codenames.GameID
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		rows, err := sdb.Query(getPendingGamesStmt)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		defer rows.Close()
+
+		var ids []codenames.GameID
+		for rows.Next() {
+			var id codenames.GameID
+			if err := rows.Scan(&id); err != nil {
+				resChan <- &result{err: err}
+				return
+			}
+			ids = append(ids, id)
+		}
+
+		if err := rows.Err(); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{ids: ids}
+	}
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+
+	return res.ids, nil
 }
 
 func (s *DB) JoinGame(_ codenames.GameID, _ *codenames.JoinRequest) error {

@@ -54,6 +54,9 @@ type Card struct {
 	// Revealed is true if the card has been guessed and the identity has been
 	// shown to operatives.
 	Revealed bool
+	// Revealed by is set to the team that chose this card to turnover. This is
+	// set to NoTeam unless Revealed is true.
+	RevealedBy Team
 }
 
 // Agent is the affiliation of a codename.
@@ -131,6 +134,7 @@ func Revealed(b *Board) *Board {
 	for i, card := range b.Cards {
 		out[i].Revealed = card.Revealed
 		out[i].Codename = card.Codename
+		out[i].RevealedBy = card.RevealedBy
 		if card.Revealed {
 			out[i].Agent = card.Agent
 		}
