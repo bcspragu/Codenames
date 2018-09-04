@@ -46,9 +46,10 @@ type User struct {
 }
 
 type Game struct {
-	ID     GameID
-	Status GameStatus
-	State  *GameState
+	ID        GameID
+	CreatedBy UserID
+	Status    GameStatus
+	State     *GameState
 }
 
 type GameState struct {
@@ -66,6 +67,8 @@ type JoinRequest struct {
 type DB interface {
 	NewGame(*Game) (GameID, error)
 	NewUser(*User) (UserID, error)
+
+	User(UserID) (*User, error)
 
 	PendingGames() ([]GameID, error)
 	JoinGame(GameID, *JoinRequest) error

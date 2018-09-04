@@ -28,8 +28,10 @@ var (
 
 var (
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
-	createGameStmt = `INSERT INTO Games (id, status, state) VALUES (?, ?, ?)`
+	createGameStmt = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`
 	gameExistsStmt = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
+
+	getUserStmt = `SELECT id, display_name FROM Users WHERE id = ?`
 
 	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 1 ORDER BY id`
 
@@ -116,7 +118,7 @@ func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
 			return
 		}
 
-		_, err = tx.Exec(createGameStmt, string(id), codenames.Pending, gsb)
+		_, err = tx.Exec(createGameStmt, string(id), codenames.Pending, string(g.CreatedBy), gsb)
 		if err != nil {
 			resChan <- &result{err: err}
 			return
@@ -159,6 +161,34 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 		return codenames.UserID(""), res.err
 	}
 	return res.id, nil
+}
+
+func (s *DB) User(id codenames.UserID) (*codenames.User, error) {
+	type result struct {
+		user *codenames.User
+		err  error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		var u codenames.User
+		err := sdb.QueryRow(getUserStmt, string(id)).Scan(&u.ID, &u.Name)
+		if err == sql.ErrNoRows {
+			resChan <- &result{err: codenames.ErrUserNotFound}
+			return
+		} else if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{user: &u}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.user, nil
 }
 
 func (s *DB) PendingGames() ([]codenames.GameID, error) {

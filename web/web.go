@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strings"
 
 	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/boardgen"
@@ -46,6 +47,10 @@ func New(db codenames.DB, r *rand.Rand) (*Srv, error) {
 
 func (s *Srv) initMux() *mux.Router {
 	m := mux.NewRouter()
+	// New user.
+	m.HandleFunc("/api/user", s.serveCreateUser).Methods("POST")
+	// Load user.
+	m.HandleFunc("/api/user", s.serveUser).Methods("GET")
 	// New game.
 	m.HandleFunc("/api/game", s.serveCreateGame).Methods("POST")
 	// Pending games.
@@ -74,13 +79,69 @@ func (s *Srv) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
+func (s *Srv) serveCreateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		http.Error(w, "No name given", http.StatusBadRequest)
+		return
+	}
+
+	id, err := s.db.NewUser(&codenames.User{Name: name})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	encoded, err := s.sc.Encode("auth", id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, struct {
+		Success     bool
+		CookieValue string
+	}{true, encoded})
+}
+
+func (s *Srv) serveUser(w http.ResponseWriter, r *http.Request) {
+	u, err := s.loadUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, u)
+}
+
 func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
+	u, err := s.loadUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if u == nil {
+		http.Error(w, "Not logged in", http.StatusUnauthorized)
+		return
+	}
+
 	ar := codenames.RedTeam
 	if s.r.Intn(2) == 0 {
 		ar = codenames.BlueTeam
 	}
 
 	id, err := s.db.NewGame(&codenames.Game{
+		CreatedBy: u.ID,
 		State: &codenames.GameState{
 			ActiveTeam: ar,
 			ActiveRole: codenames.SpymasterRole,
@@ -92,10 +153,7 @@ func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(struct{ ID string }{string(id)}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	jsonResp(w, struct{ ID string }{string(id)})
 }
 
 func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) {
@@ -105,10 +163,7 @@ func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(gIDs); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	jsonResp(w, gIDs)
 }
 
 func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) {
@@ -146,10 +201,7 @@ func (s *Srv) serveBoard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(b); err != nil {
-		log.Printf("serveBoard: %v", err)
-	}
+	jsonResp(w, b)
 }
 
 func toJSBoard(b *codenames.Board) (*jsBoard, error) {
@@ -203,4 +255,39 @@ func loadOrGenKey(name string) ([]byte, error) {
 		return nil, errors.New("Error writing file")
 	}
 	return dat, nil
+}
+
+func jsonResp(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("jsonResp: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (s *Srv) loadUser(r *http.Request) (*codenames.User, error) {
+	c, err := r.Cookie("auth")
+	if err == http.ErrNoCookie {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var uID codenames.UserID
+	if err := s.sc.Decode("auth", c.Value, &uID); err != nil {
+		// If we can't parse it, assume it's an old auth cookie and treat them as
+		// not logged in.
+		return nil, nil
+	}
+
+	u, err := s.db.User(uID)
+	if err == codenames.ErrUserNotFound {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	return u, nil
 }

@@ -8,6 +8,8 @@ CREATE TABLE Games (
     id TEXT NOT NULL,  -- "Pronounceable", random combo of words
     status TEXT NOT NULL,  -- Enum: PENDING, PLAYING, FINISHED
     state BLOB NOT NULL,
+    creator_id TEXT NOT NULL,
+    FOREIGN KEY (creator_id) REFERENCES Users(id),
     PRIMARY KEY (id)
 );
 
