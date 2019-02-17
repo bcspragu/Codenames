@@ -23,9 +23,6 @@ func main() {
 
 	flag.Parse()
 
-	log.Printf("HTTP Address: %q", *addr)
-	log.Printf("DB Path: %q", *dbPath)
-
 	r := rand.New(cryptoRandSource{})
 	db, err := sqldb.New(*dbPath, r)
 	if err != nil {

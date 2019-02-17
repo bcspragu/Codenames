@@ -3,10 +3,8 @@ pipeline:
     group: build
     image: golang:1.11
     commands:
-      - GOCACHE=/go/pkg/mod/go-build CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
-      - GOCACHE=/go/pkg/mod/go-build go test ./...
-    volumes:
-      - /tmp/gocache:/go/pkg/mod
+      - GO111MODULE=on GOPROXY=http://athens:3000 CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+      - GO111MODULE=on GOPROXY=http://athens:3000 go test ./...
   frontend:
     group: build
     image: docker.bsprague.com/node
@@ -20,14 +18,20 @@ pipeline:
     image: plugins/docker
     repo: docker.bsprague.com/codenames
     registry: docker.bsprague.com
-    secrets: [ docker_username, docker_password ]
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
   scp:
     group: deploy
     image: appleboy/drone-scp
     host: prod.bsprague.com
-    secrets: [ ssh_username, ssh_key ]
+    username:
+      from_secret: ssh_username
+    key:
+      from_secret: ssh_key
     target: /var/www/codenames.ai
     source: web/frontend/dist/*
     rm: true
@@ -36,7 +40,10 @@ pipeline:
     group: deploy
     image: appleboy/drone-ssh
     host: prod.bsprague.com
-    secrets: [ ssh_username, ssh_key ]
+    username:
+      from_secret: ssh_username
+    key:
+      from_secret: ssh_key
     script:
       - sudo systemctl restart codenames.service
 
