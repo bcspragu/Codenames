@@ -31,8 +31,8 @@ steps:
     context: cmd/codenames-server/
 - name: scp
   image: appleboy/drone-scp
-  host: prod.bsprague.com
   settings:
+    host: prod.bsprague.com
     username:
       from_secret: ssh_username
     key:
