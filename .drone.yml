@@ -2,10 +2,9 @@ pipeline:
   backend:
     group: build
     image: golang:1.11
-    environment:
-      GO111MODULE: on
-      GOPROXY: https://athens.bsprague.com
     commands:
+      - export GO111MODULE=on
+      - export GOPROXY=https://athens.bsprague.com
       - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
       - go test ./...
   frontend:
