@@ -1,24 +1,26 @@
-pipeline:
-  backend:
-    group: build
-    image: golang:1.11
-    commands:
-      - export GO111MODULE=on
-      - export GOPROXY=https://athens.bsprague.com
-      - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
-      - go test ./...
-  frontend:
-    group: build
-    image: docker.bsprague.com/node
-    commands:
-      - cd web/frontend
-      - yarn
-      - yarn build
-    volumes:
-      - name: nodecache
-        path: /drone/src/web/frontend/node_modules
-  docker:
-    image: plugins/docker
+kind: pipeline
+name: default
+
+steps:
+- name: backend
+  image: golang:1.11
+  commands:
+    - export GO111MODULE=on
+    - export GOPROXY=https://athens.bsprague.com
+    - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+    - go test ./...
+- name: frontend
+  image: docker.bsprague.com/node
+  commands:
+    - cd web/frontend
+    - yarn
+    - yarn build
+  volumes:
+    - name: nodecache
+      path: /drone/src/web/frontend/node_modules
+- name: docker
+  image: plugins/docker
+  settings:
     repo: docker.bsprague.com/codenames
     registry: docker.bsprague.com
     username:
@@ -27,10 +29,10 @@ pipeline:
       from_secret: docker_password
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
-  scp:
-    group: deploy
-    image: appleboy/drone-scp
-    host: prod.bsprague.com
+- name: scp
+  image: appleboy/drone-scp
+  host: prod.bsprague.com
+  settings:
     username:
       from_secret: ssh_username
     key:
@@ -39,9 +41,9 @@ pipeline:
     source: web/frontend/dist/*
     rm: true
     strip_components: 3
-  ssh:
-    group: deploy
-    image: appleboy/drone-ssh
+- name: ssh
+  image: appleboy/drone-ssh
+  settings:
     host: prod.bsprague.com
     username:
       from_secret: ssh_username

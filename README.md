@@ -173,7 +173,7 @@ A button allows the user to create a new game.
 There will also be a list of names of existing games that the player can either
 join (if it hasn't started yet) or spectate.
 
-Games will be identified by a combination of a few codeanmes words (or other words
+Games will be identified by a combination of a few codenames words (or other words
 I guess), so that the room names are pronounceable.
 
 3. Start Game
@@ -251,7 +251,7 @@ keeps it simple.
 - Lets Encrypt because it's 2018
 - Static assets
 - Docker
-- The main webserver binary
+- The main web server binary
     - Websockets for nice updates to the PWA
     - Talks to the DB
     - Talks to the AI
