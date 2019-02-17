@@ -15,7 +15,8 @@ pipeline:
       - yarn
       - yarn build
     volumes:
-      - /tmp/nodecache:/drone/src/github.com/bcspragu/Codenames/web/frontend/node_modules
+      - name: nodecache
+        path: /drone/src/web/frontend/node_modules
   docker:
     image: plugins/docker
     repo: docker.bsprague.com/codenames
@@ -48,5 +49,10 @@ pipeline:
       from_secret: ssh_key
     script:
       - sudo systemctl restart codenames.service
+
+volumes:
+- name: nodecache
+  host:
+    path: /tmp/nodecache
 
 branches: master
