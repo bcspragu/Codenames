@@ -3,8 +3,10 @@ pipeline:
     group: build
     image: golang:1.11
     commands:
-      - GO111MODULE=on GOPROXY=http://athens:3000 CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
-      - GO111MODULE=on GOPROXY=http://athens:3000 go test ./...
+      - export GO111MODULE=on
+      - export GOPROXY=http://athens:3000
+      - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+      - go test ./...
   frontend:
     group: build
     image: docker.bsprague.com/node
