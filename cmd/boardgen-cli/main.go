@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"time"
 
-	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/boardgen"
+	"github.com/bcspragu/Codenames/codenames"
 )
 
 var (

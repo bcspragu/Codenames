@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"code.sajari.com/word2vec"
-	w2v "github.com/bcspragu/Codenames/w2v"
+	"github.com/bcspragu/Codenames/w2v"
 )
 
 func main() {

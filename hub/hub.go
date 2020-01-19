@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/gorilla/websocket"
 )
 

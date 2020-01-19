@@ -8,7 +8,7 @@ import (
 	"io"
 	"sort"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/dict"
 	"golang.org/x/net/context"
 	"google.golang.org/api/option"

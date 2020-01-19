@@ -3,7 +3,7 @@ package web
 import (
 	"testing"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )

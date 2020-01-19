@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 )
 
 // Spymaster asks the user on the terminal to enter a clue. It assumes they

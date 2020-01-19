@@ -3,7 +3,7 @@ package hub
 import (
 	"time"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 
 	"github.com/gorilla/websocket"
 )

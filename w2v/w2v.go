@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 
 	"code.sajari.com/word2vec"
 )
@@ -53,6 +53,9 @@ func (ai *AI) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
 			clue = match.Word
 		}
 	}
+
+	// TODO: Confirm that the clue chosen isn't a superset of any of the words on
+	// the board (ex. 'band' and 'bands').
 
 	return &codenames.Clue{Word: clue, Count: 1}, nil
 }
