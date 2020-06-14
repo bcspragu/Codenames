@@ -10,7 +10,7 @@ steps:
     - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
     - go test ./...
 - name: frontend
-  image: docker.bsprague.com/node
+  image: node:alpine
   commands:
     - cd web/frontend
     - yarn
