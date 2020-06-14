@@ -37,7 +37,7 @@ steps:
       from_secret: ssh_username
     key:
       from_secret: ssh_key
-    target: /var/www/codenames.ai
+    target: /srv/www/codenames.ai
     source: web/frontend/dist/*
     rm: true
     strip_components: 3
