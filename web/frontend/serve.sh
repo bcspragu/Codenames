@@ -1,2 +1,7 @@
 #!/bin/bash
-docker run --rm -it --net=host -v $PWD:/project node-env yarn serve
+docker run --rm -it \
+  -w /project \
+  --net=host \
+  --volume $PWD:/project \
+  --user $(id -u):$(id -g) \
+  node:alpine yarn serve
