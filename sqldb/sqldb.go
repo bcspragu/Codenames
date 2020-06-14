@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"os"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 
 	_ "github.com/mattn/go-sqlite3"
 )

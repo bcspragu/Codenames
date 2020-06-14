@@ -1,2 +1,2 @@
 #!/bin/bash
-docker build -t node-env .
+docker build -t node-env-codenames .

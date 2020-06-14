@@ -3,7 +3,7 @@ package boardgen
 import (
 	"math/rand"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 )
 
 var baseAgents = []codenames.Agent{

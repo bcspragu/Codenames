@@ -44,40 +44,37 @@ export default class Board extends Vue {
 }
 </script>
 
-<style scoped lang="scss">
+<style scoped lang="css">
 
 .row.columns {
   margin-bottom: 0.6rem;
 }
 
-.cell {
-  >.body {
-    margin-left: 0.3rem;
-    margin-right: 0.3rem;
-    min-height: 3rem;
+.cell > .body {
+  margin-left: 0.3rem;
+  margin-right: 0.3rem;
+  min-height: 3rem;
 
-    text-overflow: ellipsis;
-    whitespace: nowrap;
-    overflow: hidden;
+  text-overflow: ellipsis;
+  whitespace: nowrap;
+  overflow: hidden;
 
-    font-weight: bold;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    border-radius: 0.25rem;
-
-    &.red {
-      background-color: rgba(255, 0, 0, 0.3);
-    }
-
-    &.blue {
-      background-color: rgba(0, 0, 255, 0.3);
-    }
-
-    &.grey {
-      background-color: rgba(0, 0, 0, 0.3);
-    }
-  }
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 0.25rem;
 }
 
+.cell > .body.red {
+  background-color: rgba(255, 0, 0, 0.3);
+}
+
+.cell > .body.blue {
+  background-color: rgba(0, 0, 255, 0.3);
+}
+
+.cell > .body.grey {
+  background-color: rgba(0, 0, 0, 0.3);
+}
 </style>

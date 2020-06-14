@@ -3,7 +3,7 @@ name: default
 
 steps:
 - name: backend
-  image: golang:1.11
+  image: golang:1.13
   commands:
     - export GO111MODULE=on
     - export GOPROXY=https://athens.bsprague.com

@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 )
 
 // Game represents a game of codenames.

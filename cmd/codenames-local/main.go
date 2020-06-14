@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	codenames "github.com/bcspragu/Codenames"
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/game"
 	"github.com/bcspragu/Codenames/io"
 	"github.com/bcspragu/Codenames/w2v"
@@ -33,6 +33,7 @@ func main() {
 		wordList  = flag.String("words", "", "Comma-separated list of words and the agent they're assigned to. Ex dog:red,wallet:blue,bowl:assassin,glass:blue,hood:bystander")
 		starter   = flag.String("starter", "red", "Which color team starts the game")
 		team      = flag.String("team", "red", "Team to be")
+		useAI     = flag.Bool("use_ai", false, "Whether or not the starting team should be an AI.")
 	)
 	flag.Parse()
 
@@ -49,10 +50,16 @@ func main() {
 		log.Fatalf("Expected %d words, got %d words", codenames.Size, len(words))
 	}
 
-	// Initialize our word2vec model.
-	ai, err := w2v.New(*modelFile)
-	if err != nil {
-		log.Fatalf("Failed to initialize word2vec model: %v", err)
+	var (
+		ai  *w2v.AI
+		err error
+	)
+	if *useAI {
+		// Initialize our word2vec model.
+		ai, err = w2v.New(*modelFile)
+		if err != nil {
+			log.Fatalf("Failed to initialize word2vec model: %v", err)
+		}
 	}
 
 	var (
@@ -62,11 +69,13 @@ func main() {
 		bop codenames.Operative = &io.Operative{In: os.Stdin, Out: os.Stdout, Team: codenames.BlueTeam}
 	)
 
-	switch teamMap[*starter] {
-	case codenames.RedTeam:
-		rsm = ai
-	case codenames.BlueTeam:
-		bsm = ai
+	if *useAI {
+		switch teamMap[*starter] {
+		case codenames.RedTeam:
+			rsm = ai
+		case codenames.BlueTeam:
+			bsm = ai
+		}
 	}
 
 	cards := make([]codenames.Card, len(words))

@@ -28,8 +28,6 @@ export default class App extends Vue {
 </script>
 
 <style lang="scss">
-// Import Bulma's core
-@import "~bulma/sass/utilities/_all";
 
 // Custom styles go here
 html, body, #app {
@@ -38,8 +36,4 @@ html, body, #app {
   width: 100%;
   height: 100%;
 }
-
-// Import Bulma and Buefy styles
-@import "~bulma";
-@import "~buefy/src/scss/buefy";
 </style>

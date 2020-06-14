@@ -42,7 +42,7 @@ export default class Login extends Vue {
 }
 </script>
 
-<style scoped lang="scss">
+<style scoped lang="css">
 .container {
   height: 100%;
   display: flex;

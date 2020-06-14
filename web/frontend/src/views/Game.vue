@@ -8,5 +8,5 @@ import { Component, Vue } from 'vue-property-decorator';
 export default class Game extends Vue {}
 </script>
 
-<style scoped lang="scss">
+<style scoped lang="css">
 </style>

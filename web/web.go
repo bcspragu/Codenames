@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"strings"
 
-	codenames "github.com/bcspragu/Codenames"
 	"github.com/bcspragu/Codenames/boardgen"
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/hub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
