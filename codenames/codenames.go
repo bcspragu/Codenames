@@ -31,7 +31,7 @@ type Board struct {
 	// Cards is a list of the 25 words on the board. The zeroth card corresponds
 	// to the top-left, the fourth to the top-right, and the twenty-fourth to the
 	// bottom-right.
-	Cards []Card
+	Cards []Card `json:"cards"`
 }
 
 // Clue is a word and a count from the Spymaster.
@@ -47,16 +47,16 @@ func (c *Clue) String() string {
 // Codename is a single game card, and its corresponding affiliation.
 type Card struct {
 	// Codename is the word on the card, the "codename" of the agent.
-	Codename string
+	Codename string `json:"codeword"`
 	// Agent is the type of the card, or UnknownAgent if the player doesn't yet
 	// know the affiliation.
-	Agent Agent
+	Agent Agent `json:"agent"`
 	// Revealed is true if the card has been guessed and the identity has been
 	// shown to operatives.
-	Revealed bool
+	Revealed bool `json:"revealed"`
 	// Revealed by is set to the team that chose this card to turnover. This is
 	// set to NoTeam unless Revealed is true.
-	RevealedBy Team
+	RevealedBy Team `json:"revealed_by"`
 }
 
 // Agent is the affiliation of a codename.

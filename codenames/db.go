@@ -16,17 +16,17 @@ var (
 type UserID string
 type GameID string
 
-type GameStatus int
+type GameStatus string
 
 const (
 	// NoStatus is an error case.
-	NoStatus GameStatus = iota
+	NoStatus = GameStatus("")
 	// Game hasn't started yet.
-	Pending
+	Pending = GameStatus("PENDING")
 	// Game is in progress.
-	Playing
+	Playing = GameStatus("PLAYING")
 	// Game is pfinished.
-	PFinished
+	PFinished = GameStatus("PFINISHED")
 )
 
 type Role int
@@ -46,16 +46,16 @@ type User struct {
 }
 
 type Game struct {
-	ID        GameID
-	CreatedBy UserID
-	Status    GameStatus
-	State     *GameState
+	ID        GameID     `json:"id"`
+	CreatedBy UserID     `json:"created_by"`
+	Status    GameStatus `json:"status"`
+	State     *GameState `json:"state"`
 }
 
 type GameState struct {
-	ActiveTeam Team
-	ActiveRole Role
-	Board      *Board
+	ActiveTeam Team   `json:"active_team"`
+	ActiveRole Role   `json:"active_role"`
+	Board      *Board `json:"board"`
 }
 
 type JoinRequest struct {
@@ -71,6 +71,7 @@ type DB interface {
 	User(UserID) (*User, error)
 
 	PendingGames() ([]GameID, error)
+	Game(GameID) (*Game, error)
 	JoinGame(GameID, *JoinRequest) error
 	UpdateState(GameID, *GameState) error
 }

@@ -173,7 +173,21 @@ func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		http.Error(w, "no game ID provided", http.StatusBadGateway)
+		return
+	}
+	gID := codenames.GameID(id)
 
+	game, err := s.db.Game(gID)
+	if err != nil {
+		http.Error(w, "failed to load game", http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, game)
 }
 
 func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) {

@@ -67,8 +67,31 @@ generally RESTful way. The endpoints are as follows:
   ```
 
 // Get game.
-* [Not Implemented] `GET /api/game/{id}` - Returns all the information we have
-  about the game.
+* `GET /api/game/{id}` - Returns all the information we have about the game
+  with the given ID.
+
+  ```
+  == Example Request ==
+  GET /api/game/TheGameID123
+  {} // No body or anything
+
+  == Example Response ==
+  {
+    "id": "TheGameID123",
+    "created_by": "user_id_123",
+    "status": "PENDING",
+    "state": {
+      "active_team": "RED",
+      "active_role": "SPYMASTER",
+      "board": {
+        "cards": [
+          {"codeword": "watch", "agent": "UNKNOWN_AGENT", "revealed": false, "revealed_by": "NO_TEAM"},
+          {"codeword": "time", "agent": "RED", "revealed": true, "revealed_by": "RED"},
+          [ ... ]
+        ]
+      }
+    }
+  }
 
 
 // Join game.

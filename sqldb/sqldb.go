@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 
@@ -30,10 +31,11 @@ var (
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
 	createGameStmt = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`
 	gameExistsStmt = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
+	getGameStmt    = `SELECT id, status, creator_id, state FROM Games WHERE id = ?`
 
 	getUserStmt = `SELECT id, display_name FROM Users WHERE id = ?`
 
-	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 1 ORDER BY id`
+	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'PENDING' ORDER BY id`
 
 	joinGameStmt        = `INSERT INTO GamePlayers (game_id, user_id, role, team) VALUES (?, ?, ?, ?)`
 	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
@@ -136,6 +138,49 @@ func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
 		return codenames.GameID(""), res.err
 	}
 	return res.id, nil
+}
+
+func (s *DB) Game(gID codenames.GameID) (*codenames.Game, error) {
+	type result struct {
+		game *codenames.Game
+		err  error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		tx, err := sdb.Begin()
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		defer tx.Rollback()
+
+		var (
+			g   codenames.Game
+			gsb []byte
+		)
+		if err := tx.QueryRow(getGameStmt, string(gID)).Scan(&g.ID, &g.Status, &g.CreatedBy, &gsb); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		if g.State, err = gameStateFromBytes(gsb); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		resChan <- &result{game: &g}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.game, nil
 }
 
 func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
@@ -263,4 +308,12 @@ func gameStateBytes(s *codenames.GameState) ([]byte, error) {
 	var buf bytes.Buffer
 	err := gob.NewEncoder(&buf).Encode(&s)
 	return buf.Bytes(), err
+}
+
+func gameStateFromBytes(dat []byte) (*codenames.GameState, error) {
+	var gs codenames.GameState
+	if err := gob.NewDecoder(bytes.NewReader(dat)).Decode(&gs); err != nil {
+		return nil, fmt.Errorf("failed to load game state: %w", err)
+	}
+	return &gs, nil
 }
