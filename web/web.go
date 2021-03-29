@@ -107,10 +107,14 @@ func (s *Srv) serveCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.SetCookie(w, &http.Cookie{
+		Name:  "Authorization",
+		Value: encoded,
+	})
+
 	jsonResp(w, struct {
-		Success     bool
-		CookieValue string
-	}{true, encoded})
+		Success bool `json:"success"`
+	}{true})
 }
 
 func (s *Srv) serveUser(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +157,9 @@ func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jsonResp(w, struct{ ID string }{string(id)})
+	jsonResp(w, struct {
+		ID string `json:"id"`
+	}{string(id)})
 }
 
 func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) {
@@ -267,7 +273,7 @@ func jsonResp(w http.ResponseWriter, v interface{}) {
 }
 
 func (s *Srv) loadUser(r *http.Request) (*codenames.User, error) {
-	c, err := r.Cookie("auth")
+	c, err := r.Cookie("Authorization")
 	if err == http.ErrNoCookie {
 		return nil, nil
 	}

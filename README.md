@@ -6,28 +6,24 @@ implemented in Go and utilizing the [Cloud Vision
 API](https://cloud.google.com/vision/) for parsing game boards from an image,
 and [word2vec](https://en.wikipedia.org/wiki/Word2vec) for hints and guesses.
 
-## Usage
+## What's in this repo?
 
-The `codenames-local` binary takes three flags:
+This repo contains a few distinct components:
 
-* `--model_file` (Required) - A file containing a pre-trained word2vec model. Required, or
-  the AI can't make associates between words.
-* `--api_key_file` (Optional) - A file containing a Google Cloud API Key that
-  has access to the Cloud Vision API. If not specified, will attempt to
-  authenticate with [Google Default
-  Credentials](https://developers.google.com/identity/protocols/application-default-credentials).
-* `--dict_file` (Optional) - A list of newline-separated words all in capital
-  letters, used to sanitize Cloud Vision output. If not specified, the image
-  parser may struggle to parse a valid board.
+* `boardgen-cli` - A command-line tool for printing out a randomized list of
+  cards, can be used as input to a local game.
+* `codenames-local` - A command-line tool for playing a game on the
+  command-line, can use AI players
+* `codenames-server` - An HTTP-based API server that can manage games in a
+  SQLite database.
 
-## Models
+## Word2Vec Models
 
 ### GoogleNews
 
 Download the GoogleNews-nectors-negative300.bin.gz listed on https://code.google.com/archive/p/word2vec/.
 
 It's available on [Google Drive](https://drive.google.com/file/d/0B7XkCwpI5KDYNlNUTTlSS21pQmM/edit)
-
 
 ### Project Gutenberg
 

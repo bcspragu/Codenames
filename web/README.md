@@ -1,22 +1,91 @@
-# Codenames Web
+# Codenames API Server
 
-This directory holds the Codenames web server and frontend. Currently, it's
-just the frontend, but that will probably change at some point, we'll see.
+This directory holds the Codenames API server, which backs the ReactJS
+frontend.
 
-## Running the frontend
+## API
 
-To avoid installing JavaScript garbage on my beautiful computer, I run the
-frontend in Docker. To run the frontend in development mode with live reloading
-and linting and stuff, first build the Docker container, which is just a simple
-Alpine image containing `npm` and `yarn`, then run the container.
+The Codenames API Server serves an API over the usual HTTP/JSON spec, in a
+generally RESTful way. The endpoints are as follows:
 
-```bash
-# Builds the container.
-$ ./build.sh
-$ cd frontend
-# You only need to run install.sh once.
-$ ./install.sh
-$ ./serve.sh
-```
+* `POST /api/user` - Creates a new user entity, required for playing games and
+  generally doing anything.
 
-The server should be running at `localhost:8080`
+  ```
+  == Example Request ==
+  POST /api/user
+  {"name": "Testy McTesterson"}
+
+  == Example Response ==
+  Set-Cookie Authorization $SOME_ENCRYPTED_AUTH_TOKEN
+  {"success": true}
+  ```
+
+  The important thing is to make sure the client is actually respecting the
+  `Set-Cookie` response header, or auth won't actually work.
+
+* `GET /api/user` - Loads information about the currently logged in user,
+  returns `null` if there's no authentication header, or the account isn't
+  found, etc, etc.
+
+  ```
+  == Example Request ==
+  GET /api/user
+  {} // Or no body at all is probably fine, just make sure the "Authorization"
+  header is set.
+
+  == Example Response (no user) ==
+  null
+
+  == Example Response (user is logged in) ==
+  {"id": "abc123", "name": "Testy McTesterson"}
+  ```
+
+* `POST /api/game` - Creates a new pending game, and returns the ID of the
+  newly created game.
+
+  ```
+  == Example Request ==
+  POST /api/game
+  {} // Or no body is likely fine.
+
+  == Example Response ==
+  {"id": "game123"}
+  ```
+
+// Pending games.
+* `GET /api/games` - Returns a list of all the games that haven't been started
+  yet, basically a discount lobby.
+
+  ```
+  == Example Request ==
+  GET /api/games
+  {} // Again, no body is probably fine.
+
+  == Example Response ==
+  ["game123", "game456"] // A list of game IDs
+  ```
+
+// Get game.
+* [Not Implemented] `GET /api/game/{id}` - Returns all the information we have
+  about the game.
+
+
+// Join game.
+* `[Not Implemented] POST /api/game/{id}/join` - s.serveJoinGame
+
+// Start game.
+* [Not Implemented] `POST /api/game/{id}/start` - s.serveStartGame
+
+// Serve a clue to a game.
+* [Not Implemented] `POST /api/game/{id}/clue` - s.serveClue
+
+// Serve a card guess to a game.
+* [Not Implemented]`POST /api/game/{id}/guess` - s.serveGuess
+
+
+## Error Handling
+
+If the response code is _not_ a `200 OK`, the response body will contain the
+error message, which probably isn't human-readable, or at least not useful for
+end clients.

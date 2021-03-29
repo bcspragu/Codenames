@@ -39,10 +39,10 @@ const (
 )
 
 type User struct {
-	ID UserID
+	ID UserID `json:"id"`
 	// Name is the name that gets displayed. It should arguably be called
 	// DisplayName, but who's got time to type out all those letters.
-	Name string
+	Name string `json:"name"`
 }
 
 type Game struct {
