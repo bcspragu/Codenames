@@ -91,7 +91,7 @@ const (
 	Assassin
 )
 
-type Team int
+type Team string
 
 func (t Team) String() string {
 	switch t {
@@ -105,9 +105,9 @@ func (t Team) String() string {
 
 const (
 	// NoTeam is an error case.
-	NoTeam Team = iota
-	RedTeam
-	BlueTeam
+	NoTeam   = Team("")
+	RedTeam  = Team("RED")
+	BlueTeam = Team("BLUE")
 )
 
 // Unused returns a list of cards that haven't been assigned an Agent type yet.

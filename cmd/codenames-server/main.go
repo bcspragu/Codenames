@@ -42,6 +42,7 @@ func main() {
 		os.Exit(1)
 	}()
 
+	log.Printf("Server is running on %q", *addr)
 	if err := http.ListenAndServe(*addr, srv); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

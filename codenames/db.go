@@ -29,13 +29,13 @@ const (
 	PFinished = GameStatus("PFINISHED")
 )
 
-type Role int
+type Role string
 
 const (
 	// NoRole is an error case.
-	NoRole Role = iota
-	SpymasterRole
-	OperativeRole
+	NoRole        = Role("")
+	SpymasterRole = Role("SPYMASTER")
+	OperativeRole = Role("OPERATIVE")
 )
 
 type User struct {

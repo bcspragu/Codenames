@@ -66,9 +66,6 @@ func (s *Srv) initMux() *mux.Router {
 	// Serve a card guess to a game.
 	m.HandleFunc("/api/game/{id}/guess", s.serveGuess).Methods("POST")
 
-	// TODO(bcspragu): Remove this handler, it's just for testing HTTP requests.
-	m.HandleFunc("/api/newBoard", s.serveBoard).Methods("GET")
-
 	// WebSocket handler for games.
 	m.HandleFunc("/api/game/{id}/ws", s.serveData).Methods("GET")
 
@@ -212,16 +209,6 @@ func (s *Srv) serveData(w http.ResponseWriter, r *http.Request) {
 
 type jsBoard struct {
 	Cards [][]codenames.Card
-}
-
-func (s *Srv) serveBoard(w http.ResponseWriter, r *http.Request) {
-	b, err := toJSBoard(boardgen.New(codenames.RedTeam, s.r))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	jsonResp(w, b)
 }
 
 func toJSBoard(b *codenames.Board) (*jsBoard, error) {
