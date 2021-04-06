@@ -14,18 +14,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var (
-	dbToGameStatus = map[string]codenames.GameStatus{
-		"Pending":   codenames.Pending,
-		"Playing":   codenames.Playing,
-		"PFinished": codenames.PFinished,
-	}
-	gameStatusToDB = map[codenames.GameStatus]string{
-		codenames.Pending:   "Pending",
-		codenames.Playing:   "Playing",
-		codenames.PFinished: "PFinished",
-	}
-)
+var ()
 
 var (
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
@@ -35,9 +24,13 @@ var (
 
 	getUserStmt = `SELECT id, display_name FROM Users WHERE id = ?`
 
+	getUserPlayerStmt = `SELECT id FROM Players WHERE user_id = ?`
+	getAIPlayerStmt   = `SELECT id FROM Players WHERE ai_id = ?`
+	createPlayerStmt  = `INSERT INTO Players (id, user_id, ai_id) VALUES (?, ?, ?)`
+
 	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'PENDING' ORDER BY id`
 
-	joinGameStmt        = `INSERT INTO GamePlayers (game_id, user_id, role, team) VALUES (?, ?, ?, ?)`
+	joinGameStmt        = `INSERT INTO GamePlayers (game_id, player_id, role, team) VALUES (?, ?, ?, ?)`
 	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
 )
 
@@ -276,8 +269,97 @@ func (s *DB) PendingGames() ([]codenames.GameID, error) {
 	return res.ids, nil
 }
 
-func (s *DB) JoinGame(_ codenames.GameID, _ *codenames.JoinRequest) error {
-	return codenames.ErrOperationNotImplemented
+func (s *DB) JoinGame(gID codenames.GameID, req *codenames.JoinRequest) error {
+	// First, see if a player entity already exists for this player.
+	pID, err := s.player(req.PlayerID)
+	if err == sql.ErrNoRows {
+		if pID, err = s.createPlayer(req.PlayerID); err != nil {
+			return fmt.Errorf("failed to create player: %w", err)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("failed to load player: %w", err)
+	}
+
+	// If we're here, we've got a player ID and we can add them to the game.
+	resChan := make(chan error)
+	s.dbChan <- func(sdb *sql.DB) {
+		_, err := sdb.Exec(joinGameStmt, gID, pID, req.Role, req.Team)
+		resChan <- err
+	}
+
+	if err := <-resChan; err != nil {
+		return fmt.Errorf("failed to join game: %w", err)
+	}
+	return nil
+}
+
+func (s *DB) createPlayer(id codenames.PlayerID) (string, error) {
+	type result struct {
+		id  string
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		pID := codenames.RandomPlayerID(s.r)
+		var userID, aiID sql.NullString
+		switch id.PlayerType {
+		case codenames.PlayerTypeHuman:
+			userID.Valid = true
+			userID.String = id.ID
+		case codenames.PlayerTypeRobot:
+			aiID.Valid = true
+			aiID.String = id.ID
+		default:
+			resChan <- &result{err: fmt.Errorf("unknown player type %q", id.PlayerType)}
+			return
+		}
+		if _, err := sdb.Exec(createPlayerStmt, pID, userID, aiID); err != nil {
+			resChan <- &result{err: fmt.Errorf("failed to insert player", err)}
+			return
+		}
+		resChan <- &result{id: pID}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return "", res.err
+	}
+	return res.id, nil
+}
+
+func (s *DB) player(id codenames.PlayerID) (string, error) {
+	type result struct {
+		id  string
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		var stmt string
+		switch id.PlayerType {
+		case codenames.PlayerTypeHuman:
+			stmt = getUserPlayerStmt
+		case codenames.PlayerTypeRobot:
+			stmt = getAIPlayerStmt
+		default:
+			resChan <- &result{err: fmt.Errorf("unknown player type %q", id.PlayerType)}
+			return
+		}
+		var outID string
+		if err := sdb.QueryRow(stmt, id.ID).Scan(&outID); err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+		resChan <- &result{id: outID}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return "", res.err
+	}
+	return res.id, nil
 }
 
 func (s *DB) UpdateState(_ codenames.GameID, _ *codenames.GameState) error {

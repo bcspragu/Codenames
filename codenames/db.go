@@ -13,6 +13,22 @@ var (
 	ErrGameNotFound            = errors.New("codenames: game not found")
 )
 
+type PlayerType string
+
+const (
+	PlayerTypeHuman = PlayerType("human")
+	PlayerTypeRobot = PlayerType("robot")
+)
+
+type PlayerID struct {
+	PlayerType PlayerType
+	ID         string
+}
+
+func (p PlayerID) String() string {
+	return string(p.PlayerType) + ":" + p.ID
+}
+
 type UserID string
 type GameID string
 
@@ -26,7 +42,7 @@ const (
 	// Game is in progress.
 	Playing = GameStatus("PLAYING")
 	// Game is pfinished.
-	PFinished = GameStatus("PFINISHED")
+	Finished = GameStatus("FINISHED")
 )
 
 type Role string
@@ -59,9 +75,9 @@ type GameState struct {
 }
 
 type JoinRequest struct {
-	UserID UserID
-	Team   Team
-	Role   Role
+	PlayerID PlayerID
+	Team     Team
+	Role     Role
 }
 
 type DB interface {
@@ -85,6 +101,14 @@ func RandomGameID(r *rand.Rand) GameID {
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+func RandomPlayerID(r *rand.Rand) string {
+	b := make([]byte, 64)
+	for i := range b {
+		b[i] = letters[r.Intn(len(letters))]
+	}
+	return string(b)
+}
 
 func RandomUserID(r *rand.Rand) UserID {
 	b := make([]byte, 64)
