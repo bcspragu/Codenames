@@ -53,7 +53,6 @@ generally RESTful way. The endpoints are as follows:
   {"id": "game123"}
   ```
 
-// Pending games.
 * `GET /api/games` - Returns a list of all the games that haven't been started
   yet, basically a discount lobby.
 
@@ -66,7 +65,6 @@ generally RESTful way. The endpoints are as follows:
   ["game123", "game456"] // A list of game IDs
   ```
 
-// Get game.
 * `GET /api/game/{id}` - Returns all the information we have about the game
   with the given ID.
 
@@ -92,18 +90,26 @@ generally RESTful way. The endpoints are as follows:
       }
     }
   }
+  ```
 
+* `POST /api/game/{id}/join` - Joins the game with the given ID.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/join
+  {"team": "RED", "role": "SPYMASTER"}
 
-// Join game.
-* `[Not Implemented] POST /api/game/{id}/join` - s.serveJoinGame
+  == Example Response ==
+  {"success": true}
+  ```
+  There are a bunch of error conditions, like if the RED team already has a
+  SPYMASTER (in the above example), or if the user doesn't have auth, or if the
+  game has already started, etc. These will return an error message (no JSON
+  for now) and a non-200 status code.
 
-// Start game.
 * [Not Implemented] `POST /api/game/{id}/start` - s.serveStartGame
 
-// Serve a clue to a game.
 * [Not Implemented] `POST /api/game/{id}/clue` - s.serveClue
 
-// Serve a card guess to a game.
 * [Not Implemented]`POST /api/game/{id}/guess` - s.serveGuess
 
 

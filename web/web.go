@@ -82,7 +82,7 @@ func (s *Srv) serveCreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -188,7 +188,95 @@ func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		http.Error(w, "no game ID provided", http.StatusBadGateway)
+		return
+	}
+	gID := codenames.GameID(id)
 
+	var req struct {
+		Team string `json:"team"`
+		Role string `json:"role"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	desiredRole, ok := codenames.ToRole(req.Role)
+	if !ok {
+		http.Error(w, "bad role", http.StatusBadRequest)
+		return
+	}
+
+	desiredTeam, ok := codenames.ToTeam(req.Team)
+	if !ok {
+		http.Error(w, "bad team", http.StatusBadRequest)
+		return
+	}
+
+	u, err := s.loadUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if u == nil {
+		http.Error(w, "Not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	game, err := s.db.Game(gID)
+	if err != nil {
+		http.Error(w, "failed to load game", http.StatusInternalServerError)
+		return
+	}
+
+	if game.Status != codenames.Pending {
+		http.Error(w, "can only join pending games", http.StatusBadGateway)
+		return
+	}
+
+	prs, err := s.db.PlayersInGame(gID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	spymasters := make(map[codenames.Team]bool)
+	for _, pr := range prs {
+		if pr.Role != codenames.SpymasterRole {
+			continue
+		}
+		if spymasters[pr.Team] {
+			http.Error(w, fmt.Sprintf("multiple players set as %q spymaster", pr.Team), http.StatusInternalServerError)
+			return
+		}
+		spymasters[pr.Team] = true
+	}
+
+	if desiredRole == codenames.SpymasterRole && spymasters[desiredTeam] {
+		http.Error(w, fmt.Sprintf("team %q already has a spymaster", desiredTeam), http.StatusBadRequest)
+		return
+	}
+
+	if err := s.db.JoinGame(gID, &codenames.PlayerRole{
+		PlayerID: codenames.PlayerID{
+			PlayerType: codenames.PlayerTypeHuman,
+			ID:         string(u.ID),
+		},
+		Team: desiredTeam,
+		Role: desiredRole,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
 }
 
 func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request) {

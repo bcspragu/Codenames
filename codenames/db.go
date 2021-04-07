@@ -54,6 +54,17 @@ const (
 	OperativeRole = Role("OPERATIVE")
 )
 
+func ToRole(role string) (Role, bool) {
+	switch role {
+	case "SPYMASTER":
+		return SpymasterRole, true
+	case "OPERATIVE":
+		return OperativeRole, true
+	default:
+		return NoRole, false
+	}
+}
+
 type User struct {
 	ID UserID `json:"id"`
 	// Name is the name that gets displayed. It should arguably be called
@@ -74,7 +85,7 @@ type GameState struct {
 	Board      *Board `json:"board"`
 }
 
-type JoinRequest struct {
+type PlayerRole struct {
 	PlayerID PlayerID
 	Team     Team
 	Role     Role
@@ -88,7 +99,8 @@ type DB interface {
 
 	PendingGames() ([]GameID, error)
 	Game(GameID) (*Game, error)
-	JoinGame(GameID, *JoinRequest) error
+	JoinGame(GameID, *PlayerRole) error
+	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
 }
 

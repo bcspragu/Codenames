@@ -110,6 +110,17 @@ const (
 	BlueTeam = Team("BLUE")
 )
 
+func ToTeam(team string) (Team, bool) {
+	switch team {
+	case "RED":
+		return RedTeam, true
+	case "BLUE":
+		return BlueTeam, true
+	default:
+		return NoTeam, false
+	}
+}
+
 // Unused returns a list of cards that haven't been assigned an Agent type yet.
 func Unused(cards []Card) []Card {
 	return Targets(cards, UnknownAgent)

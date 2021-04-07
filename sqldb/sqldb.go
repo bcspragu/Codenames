@@ -30,7 +30,14 @@ var (
 
 	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'PENDING' ORDER BY id`
 
-	joinGameStmt        = `INSERT INTO GamePlayers (game_id, player_id, role, team) VALUES (?, ?, ?, ?)`
+	joinGameStmt   = `INSERT INTO GamePlayers (game_id, player_id, role, team) VALUES (?, ?, ?, ?)`
+	getGamePlayers = `
+SELECT Players.user_id, Players.ai_id, GamePlayers.role, GamePlayers.team
+FROM GamePlayers
+JOIN Players
+	ON GamePlayers.player_id = Players.id
+WHERE GamePlayers.game_id = ?`
+
 	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
 )
 
@@ -269,7 +276,71 @@ func (s *DB) PendingGames() ([]codenames.GameID, error) {
 	return res.ids, nil
 }
 
-func (s *DB) JoinGame(gID codenames.GameID, req *codenames.JoinRequest) error {
+func (s *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, error) {
+	type result struct {
+		prs []*codenames.PlayerRole
+		err error
+	}
+	resChan := make(chan *result)
+
+	s.dbChan <- func(sdb *sql.DB) {
+		rows, err := sdb.Query(getGamePlayers, gID)
+		if err != nil {
+			resChan <- &result{err: fmt.Errorf("failed to query for game players: %w", err)}
+			return
+		}
+		defer rows.Close()
+
+		var prs []*codenames.PlayerRole
+		for rows.Next() {
+			var (
+				pr     codenames.PlayerRole
+				userID sql.NullString
+				aiID   sql.NullString
+			)
+			if err := rows.Scan(&userID, &aiID, &pr.Role, pr.Team); err != nil {
+				resChan <- &result{err: fmt.Errorf("failed to scan game player: %w", err)}
+				return
+			}
+			if userID.Valid && aiID.Valid {
+				resChan <- &result{err: fmt.Errorf("both user_id and ai_id were set: %q, %q", userID.String, aiID.String)}
+				return
+			}
+			if !userID.Valid && !aiID.Valid {
+				resChan <- &result{err: errors.New("neither of user_id or ai_id were set")}
+				return
+			}
+			if userID.Valid {
+				pr.PlayerID = codenames.PlayerID{
+					PlayerType: codenames.PlayerTypeHuman,
+					ID:         userID.String,
+				}
+			}
+			if aiID.Valid {
+				pr.PlayerID = codenames.PlayerID{
+					PlayerType: codenames.PlayerTypeRobot,
+					ID:         aiID.String,
+				}
+			}
+			prs = append(prs, &pr)
+		}
+
+		if err := rows.Err(); err != nil {
+			resChan <- &result{err: fmt.Errorf("error scanning rows: %w", err)}
+			return
+		}
+
+		resChan <- &result{prs: prs}
+		return
+	}
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.prs, nil
+}
+
+func (s *DB) JoinGame(gID codenames.GameID, req *codenames.PlayerRole) error {
 	// First, see if a player entity already exists for this player.
 	pID, err := s.player(req.PlayerID)
 	if err == sql.ErrNoRows {
