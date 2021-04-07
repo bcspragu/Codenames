@@ -3,6 +3,7 @@ package codenames
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/rand"
 	"strings"
 )
@@ -21,8 +22,8 @@ const (
 )
 
 type PlayerID struct {
-	PlayerType PlayerType
-	ID         string
+	PlayerType PlayerType `json:"player_type"`
+	ID         string     `json:"id"`
 }
 
 func (p PlayerID) String() string {
@@ -86,20 +87,56 @@ type GameState struct {
 }
 
 type PlayerRole struct {
-	PlayerID PlayerID
-	Team     Team
-	Role     Role
+	PlayerID PlayerID `json:"player_id"`
+	Team     Team     `json:"team"`
+	Role     Role     `json:"role"`
+}
+
+func AllRolesFilled(prs []*PlayerRole) error {
+	roleCount := make(map[Team]map[Role]int)
+	for _, pr := range prs {
+		rc, ok := roleCount[pr.Team]
+		if !ok {
+			rc = make(map[Role]int)
+		}
+		rc[pr.Role]++
+		roleCount[pr.Team] = rc
+	}
+	count := func(team Team, role Role) int {
+		rm, ok := roleCount[team]
+		if !ok {
+			return 0
+		}
+		return rm[role]
+	}
+	teams := []Team{BlueTeam, RedTeam}
+
+	for _, t := range teams {
+		switch n := count(t, SpymasterRole); n {
+		case 0:
+			return fmt.Errorf("team %q had no spymaster", t)
+		case 1:
+			// Good
+		default:
+			return fmt.Errorf("team %q somehow has %d spymasters", t, n)
+		}
+		if count(t, OperativeRole) == 0 {
+			return fmt.Errorf("team %q had no operatives", t)
+		}
+	}
+	return nil
 }
 
 type DB interface {
-	NewGame(*Game) (GameID, error)
 	NewUser(*User) (UserID, error)
-
 	User(UserID) (*User, error)
 
+	NewGame(*Game) (GameID, error)
+	StartGame(gID GameID) error
 	PendingGames() ([]GameID, error)
 	Game(GameID) (*Game, error)
 	JoinGame(GameID, *PlayerRole) error
+
 	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
 }

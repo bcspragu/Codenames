@@ -16,14 +16,16 @@ import (
 	"github.com/bcspragu/Codenames/hub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
+	"github.com/gorilla/websocket"
 )
 
 type Srv struct {
 	sc  *securecookie.SecureCookie
-	h   *hub.Hub
+	hub *hub.Hub
 	mux *mux.Router
 	db  codenames.DB
 	r   *rand.Rand
+	ws  *websocket.Upgrader
 }
 
 // New returns an initialized server.
@@ -34,10 +36,11 @@ func New(db codenames.DB, r *rand.Rand) (*Srv, error) {
 	}
 
 	s := &Srv{
-		sc: sc,
-		h:  hub.New(),
-		db: db,
-		r:  r,
+		sc:  sc,
+		hub: hub.New(),
+		db:  db,
+		r:   r,
+		ws:  &websocket.Upgrader{}, // use default options, for now
 	}
 
 	s.mux = s.initMux()
@@ -173,7 +176,7 @@ func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		http.Error(w, "no game ID provided", http.StatusBadGateway)
+		http.Error(w, "no game ID provided", http.StatusBadRequest)
 		return
 	}
 	gID := codenames.GameID(id)
@@ -191,7 +194,7 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
-		http.Error(w, "no game ID provided", http.StatusBadGateway)
+		http.Error(w, "no game ID provided", http.StatusBadRequest)
 		return
 	}
 	gID := codenames.GameID(id)
@@ -236,7 +239,7 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if game.Status != codenames.Pending {
-		http.Error(w, "can only join pending games", http.StatusBadGateway)
+		http.Error(w, "can only join pending games", http.StatusBadRequest)
 		return
 	}
 
@@ -280,7 +283,71 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		http.Error(w, "no game ID provided", http.StatusBadRequest)
+		return
+	}
+	gID := codenames.GameID(id)
 
+	u, err := s.loadUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if u == nil {
+		http.Error(w, "Not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	game, err := s.db.Game(gID)
+	if err != nil {
+		http.Error(w, "failed to load game", http.StatusInternalServerError)
+		return
+	}
+
+	if game.CreatedBy != u.ID {
+		http.Error(w, "only the game creator can start the game", http.StatusForbidden)
+		return
+	}
+
+	if game.Status != codenames.Pending {
+		http.Error(w, "can only start pending games", http.StatusBadRequest)
+		return
+	}
+
+	prs, err := s.db.PlayersInGame(gID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := codenames.AllRolesFilled(prs); err != nil {
+		http.Error(w, fmt.Sprintf("can't start game yet: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// If we're here, all the right roles are filled, the game is pending, and
+	// the caller is the one who created the game, let's start it.
+	if err := s.db.StartGame(gID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	game.Status = codenames.Playing
+
+	if err := s.hub.ToGame(gID, &GameStart{
+		Game:    game,
+		Players: prs,
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to send game start: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
 }
 
 func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request) {
@@ -292,7 +359,32 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Srv) serveData(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id, ok := vars["id"]
+	if !ok {
+		http.Error(w, "no game ID provided", http.StatusBadRequest)
+		return
+	}
+	gID := codenames.GameID(id)
 
+	u, err := s.loadUser(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if u == nil {
+		http.Error(w, "Not logged in", http.StatusUnauthorized)
+		return
+	}
+
+	conn, err := s.ws.Upgrade(w, r, nil)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.hub.Register(conn, gID, u.ID)
 }
 
 type jsBoard struct {

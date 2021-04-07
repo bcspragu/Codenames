@@ -17,19 +17,30 @@ import (
 var ()
 
 var (
+	// Game statements
+	createGameStmt      = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`
+	gameExistsStmt      = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
+	getGameStmt         = `SELECT id, status, creator_id, state FROM Games WHERE id = ?`
+	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'PENDING' ORDER BY id`
+	startGameStmt       = `
+UPDATE Games
+SET status = 'PLAYING'
+WHERE id = ?`
+	updateGameStateStmt = `
+UPDATE Games
+SET state = ?
+WHERE id = ?`
+
+	// User statements
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
-	createGameStmt = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`
-	gameExistsStmt = `SELECT EXISTS(SELECT 1 FROM Games WHERE id = ?)`
-	getGameStmt    = `SELECT id, status, creator_id, state FROM Games WHERE id = ?`
+	getUserStmt    = `SELECT id, display_name FROM Users WHERE id = ?`
 
-	getUserStmt = `SELECT id, display_name FROM Users WHERE id = ?`
-
+	// Player (e.g. user or AI) statements
 	getUserPlayerStmt = `SELECT id FROM Players WHERE user_id = ?`
 	getAIPlayerStmt   = `SELECT id FROM Players WHERE ai_id = ?`
 	createPlayerStmt  = `INSERT INTO Players (id, user_id, ai_id) VALUES (?, ?, ?)`
 
-	getPendingGamesStmt = `SELECT id FROM Games WHERE status = 'PENDING' ORDER BY id`
-
+	// Game player (e.g. Game <-> Player join table) statements
 	joinGameStmt   = `INSERT INTO GamePlayers (game_id, player_id, role, team) VALUES (?, ?, ?, ?)`
 	getGamePlayers = `
 SELECT Players.user_id, Players.ai_id, GamePlayers.role, GamePlayers.team
@@ -38,7 +49,8 @@ JOIN Players
 	ON GamePlayers.player_id = Players.id
 WHERE GamePlayers.game_id = ?`
 
-	updateGameStateStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
+	// Game history statements (currently unused)
+	updateGameHistoryStmt = `INSERT INTO GameHistory (game_id, event) VALUES (?, ?)`
 )
 
 // DB implements the Codenames database API, backed by a SQLite database.
@@ -94,6 +106,11 @@ func (s *DB) Close() error {
 }
 
 func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
+	gsb, err := gameStateBytes(g.State)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize game state: %w", err)
+	}
+
 	type result struct {
 		id  codenames.GameID
 		err error
@@ -109,12 +126,6 @@ func (s *DB) NewGame(g *codenames.Game) (codenames.GameID, error) {
 		defer tx.Rollback()
 
 		id, err := s.uniqueID(tx)
-		if err != nil {
-			resChan <- &result{err: err}
-			return
-		}
-
-		gsb, err := gameStateBytes(g.State)
 		if err != nil {
 			resChan <- &result{err: err}
 			return
@@ -433,8 +444,35 @@ func (s *DB) player(id codenames.PlayerID) (string, error) {
 	return res.id, nil
 }
 
-func (s *DB) UpdateState(_ codenames.GameID, _ *codenames.GameState) error {
-	return codenames.ErrOperationNotImplemented
+func (s *DB) StartGame(gID codenames.GameID) error {
+	resChan := make(chan error)
+	s.dbChan <- func(sdb *sql.DB) {
+		_, err := sdb.Exec(startGameStmt, gID)
+		resChan <- err
+	}
+
+	if err := <-resChan; err != nil {
+		return fmt.Errorf("failed to mark game started: %w", err)
+	}
+	return nil
+}
+
+func (s *DB) UpdateState(gID codenames.GameID, gs *codenames.GameState) error {
+	gsb, err := gameStateBytes(gs)
+	if err != nil {
+		return fmt.Errorf("failed to serialize game state: %w", err)
+	}
+
+	resChan := make(chan error)
+	s.dbChan <- func(sdb *sql.DB) {
+		_, err := sdb.Exec(updateGameStateStmt, gsb, gID)
+		resChan <- err
+	}
+
+	if err := <-resChan; err != nil {
+		return fmt.Errorf("failed to update game state: %w", err)
+	}
+	return nil
 }
 
 func (s *DB) uniqueID(tx *sql.Tx) (codenames.GameID, error) {

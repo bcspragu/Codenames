@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 
@@ -14,8 +16,11 @@ type Hub struct {
 	// Registered connections.
 	connections map[codenames.GameID][]*connection
 
-	// Inbound messages from the connections.
+	// Messages to send to everyone in a game.
 	broadcast chan *broadcastMsg
+
+	// Messages to send to a single person in a game.
+	user chan *userMsg
 
 	// Register requests from the connections.
 	register chan *connection
@@ -28,6 +33,7 @@ type Hub struct {
 func New() *Hub {
 	h := &Hub{
 		broadcast:   make(chan *broadcastMsg),
+		user:        make(chan *userMsg),
 		register:    make(chan *connection),
 		unregister:  make(chan *connection),
 		connections: make(map[codenames.GameID][]*connection),
@@ -50,6 +56,16 @@ func (h *Hub) run() {
 				case c.send <- m.msg:
 				default:
 					h.deleteConn(c)
+				}
+			}
+		case m := <-h.user:
+			for _, c := range h.connections[m.gameID] {
+				if c.userID == m.userID {
+					select {
+					case c.send <- m.msg:
+					default:
+						h.deleteConn(c)
+					}
 				}
 			}
 		}
@@ -75,17 +91,52 @@ type broadcastMsg struct {
 	msg    []byte
 }
 
-// BroadcastGame sends a message to everyone in a game.
-func (h *Hub) BroadcastGame(msg []byte, gID codenames.GameID) {
+// ToGame sends a message to everyone in a game.
+func (h *Hub) ToGame(gID codenames.GameID, msg interface{}) error {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(msg); err != nil {
+		return fmt.Errorf("failed to encode message: %w", err)
+	}
+
 	h.broadcast <- &broadcastMsg{
 		gameID: gID,
-		msg:    msg,
+		msg:    buf.Bytes(),
 	}
+
+	return nil
+}
+
+type userMsg struct {
+	gameID codenames.GameID
+	userID codenames.UserID
+	msg    []byte
+}
+
+func (h *Hub) ToUser(gID codenames.GameID, uID codenames.UserID, msg interface{}) error {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(msg); err != nil {
+		return fmt.Errorf("failed to encode message: %w", err)
+	}
+
+	h.user <- &userMsg{
+		gameID: gID,
+		userID: uID,
+		msg:    buf.Bytes(),
+	}
+
+	return nil
 }
 
 // Register associates a connection with the hub and a given game.
-func (h *Hub) Register(ws *websocket.Conn, gID codenames.GameID) {
-	conn := &connection{id: newID(gID), h: h, gameID: gID, send: make(chan []byte, 256), ws: ws}
+func (h *Hub) Register(ws *websocket.Conn, gID codenames.GameID, uID codenames.UserID) {
+	conn := &connection{
+		id:     newID(gID),
+		h:      h,
+		gameID: gID,
+		userID: uID,
+		send:   make(chan []byte, 256),
+		ws:     ws,
+	}
 	h.register <- conn
 	go conn.writePump()
 	go conn.readPump()
