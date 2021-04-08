@@ -120,6 +120,8 @@ func (g *Game) Play() (*Outcome, error) {
 
 			// TODO: If their guess is totally invalid, give them some sort of
 			// recovery mechanism to try again?
+			// Note from the future: For now, we assume clients send only valid
+			// guesses.
 			c, err := g.reveal(guess)
 			if err != nil {
 				return nil, fmt.Errorf("reveal(%q) on %q: %v", guess, g.activeTeam, err)
@@ -152,14 +154,17 @@ func (g *Game) Play() (*Outcome, error) {
 
 func (g *Game) reveal(word string) (codenames.Card, error) {
 	for i, card := range g.groundTruth.Cards {
-		if strings.ToLower(card.Codename) == strings.ToLower(word) {
-			// If the card hasn't been reveal, reveal it.
-			if !g.groundTruth.Cards[i].Revealed {
-				g.groundTruth.Cards[i].Revealed = true
-				return card, nil
-			}
+		if strings.ToLower(card.Codename) != strings.ToLower(word) {
+			continue
+		}
+
+		if g.groundTruth.Cards[i].Revealed {
 			return codenames.Card{}, fmt.Errorf("%q has already been guessed", word)
 		}
+
+		// If the card hasn't been reveal, reveal it.
+		g.groundTruth.Cards[i].Revealed = true
+		return card, nil
 	}
 	return codenames.Card{}, fmt.Errorf("no card found for guess %q", word)
 }

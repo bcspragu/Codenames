@@ -30,6 +30,10 @@ func (p PlayerID) String() string {
 	return string(p.PlayerType) + ":" + p.ID
 }
 
+func (p PlayerID) IsUser(uID UserID) bool {
+	return p.PlayerType == PlayerTypeHuman && p.ID == string(uID)
+}
+
 type UserID string
 type GameID string
 

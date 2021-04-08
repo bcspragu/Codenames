@@ -142,12 +142,10 @@ func Targets(cards []Card, agent Agent) []Card {
 // board where the card Agent is only populated for revealed cards.
 func Revealed(b *Board) *Board {
 	out := make([]Card, len(b.Cards))
+	copy(out, b.Cards)
 	for i, card := range b.Cards {
-		out[i].Revealed = card.Revealed
-		out[i].Codename = card.Codename
-		out[i].RevealedBy = card.RevealedBy
-		if card.Revealed {
-			out[i].Agent = card.Agent
+		if !card.Revealed {
+			out[i].Agent = UnknownAgent
 		}
 	}
 	return &Board{Cards: out}
