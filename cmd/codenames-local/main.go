@@ -87,8 +87,7 @@ func main() {
 		cards[i] = c
 	}
 	b := &codenames.Board{Cards: cards}
-	g, err := game.New(b, &game.Config{
-		Starter:       teamMap[*starter],
+	g, err := game.New(b, teamMap[*starter], &game.Config{
 		RedSpymaster:  rsm,
 		BlueSpymaster: bsm,
 		RedOperative:  rop,

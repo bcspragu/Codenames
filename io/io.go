@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/bcspragu/Codenames/codenames"
+	"github.com/olekukonko/tablewriter"
 )
 
 // Spymaster asks the user on the terminal to enter a clue. It assumes they
@@ -19,13 +20,43 @@ type Spymaster struct {
 	Team codenames.Team
 }
 
-func (s *Spymaster) GiveClue(_ *codenames.Board) (*codenames.Clue, error) {
+func (s *Spymaster) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
+	s.printBoard(b)
 	fmt.Fprintf(s.Out, "%s Spymaster, enter a clue [ex. 'Muffins 3']: ", s.Team)
 	sc := bufio.NewScanner(s.In)
 	if !sc.Scan() {
 		return nil, fmt.Errorf("scanner error: %v", sc.Err())
 	}
 	return codenames.ParseClue(sc.Text())
+}
+
+func (s *Spymaster) printBoard(b *codenames.Board) {
+	table := tablewriter.NewWriter(s.Out)
+
+	for i := 0; i < 5; i++ {
+		var row []string
+		var colors []tablewriter.Colors
+		for j := 0; j < 5; j++ {
+			card := b.Cards[i*5+j]
+			var c tablewriter.Colors
+			switch card.Agent {
+			case codenames.BlueAgent:
+				c = append(c, tablewriter.FgBlueColor)
+			case codenames.RedAgent:
+				c = append(c, tablewriter.FgHiRedColor)
+			case codenames.Assassin:
+				c = append(c, tablewriter.BgHiRedColor)
+			}
+			if card.Revealed {
+				c = append(c, tablewriter.UnderlineSingle)
+			}
+			colors = append(colors, c)
+			row = append(row, card.Codename)
+		}
+		table.Rich(row, colors)
+	}
+
+	table.Render()
 }
 
 // Operative asks the user on the terminal to enter a guess.

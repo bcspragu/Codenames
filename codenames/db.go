@@ -85,9 +85,11 @@ type Game struct {
 }
 
 type GameState struct {
-	ActiveTeam Team   `json:"active_team"`
-	ActiveRole Role   `json:"active_role"`
-	Board      *Board `json:"board"`
+	ActiveTeam     Team   `json:"active_team"`
+	ActiveRole     Role   `json:"active_role"`
+	Board          *Board `json:"board"`
+	NumGuessesLeft int    `json:"num_guesses_left"`
+	StartingTeam   Team   `json:"starting_team"`
 }
 
 type PlayerRole struct {

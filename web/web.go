@@ -13,6 +13,8 @@ import (
 
 	"github.com/bcspragu/Codenames/boardgen"
 	"github.com/bcspragu/Codenames/codenames"
+	"github.com/bcspragu/Codenames/consensus"
+	"github.com/bcspragu/Codenames/game"
 	"github.com/bcspragu/Codenames/hub"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/securecookie"
@@ -24,12 +26,13 @@ const (
 )
 
 type Srv struct {
-	sc  *securecookie.SecureCookie
-	hub *hub.Hub
-	mux *mux.Router
-	db  codenames.DB
-	r   *rand.Rand
-	ws  *websocket.Upgrader
+	sc        *securecookie.SecureCookie
+	hub       *hub.Hub
+	mux       *mux.Router
+	db        codenames.DB
+	r         *rand.Rand
+	ws        *websocket.Upgrader
+	consensus *consensus.Guesser
 }
 
 // New returns an initialized server.
@@ -40,11 +43,12 @@ func New(db codenames.DB, r *rand.Rand) (*Srv, error) {
 	}
 
 	s := &Srv{
-		sc:  sc,
-		hub: hub.New(),
-		db:  db,
-		r:   r,
-		ws:  &websocket.Upgrader{}, // use default options, for now
+		sc:        sc,
+		hub:       hub.New(),
+		db:        db,
+		r:         r,
+		ws:        &websocket.Upgrader{}, // use default options, for now
+		consensus: consensus.New(),
 	}
 
 	s.mux = s.initMux()
@@ -151,9 +155,10 @@ func (s *Srv) serveCreateGame(w http.ResponseWriter, r *http.Request) {
 	id, err := s.db.NewGame(&codenames.Game{
 		CreatedBy: u.ID,
 		State: &codenames.GameState{
-			ActiveTeam: ar,
-			ActiveRole: codenames.SpymasterRole,
-			Board:      boardgen.New(ar, s.r),
+			StartingTeam: ar,
+			ActiveTeam:   ar,
+			ActiveRole:   codenames.SpymasterRole,
+			Board:        boardgen.New(ar, s.r),
 		},
 	})
 	if err != nil {
@@ -360,12 +365,111 @@ func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codename
 	}{true})
 }
 
-func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
+func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.User, g *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
+	if g.Status != codenames.Playing {
+		http.Error(w, "can't give clues to a not-playing game", http.StatusBadRequest)
+		return
+	}
 
+	var req struct {
+		Word  string `json:"word"`
+		Count int    `json:"count"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// We don't need to check if the status changed/game is over, because giving
+	// a clue will never end the game.
+	newState, _, err := game.NewForMove(g.State).Move(&game.Move{
+		Action: game.ActionGiveClue,
+		Team:   userPR.Team,
+		GiveClue: &codenames.Clue{
+			Word:  req.Word,
+			Count: req.Count,
+		},
+	})
+	if err != nil {
+		// We assume the error is the result of a bad request.
+		http.Error(w, fmt.Sprintf("failed to make move : %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Update the state in the database.
+	if err := s.db.UpdateState(g.ID, newState); err != nil {
+		http.Error(w, fmt.Sprintf("failed to update game state: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
-func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
+func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.User, g *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
+	if g.Status != codenames.Playing {
+		http.Error(w, "can't guess in a not-playing game", http.StatusBadRequest)
+		return
+	}
 
+	var req struct {
+		Guess     string `json:"word"`
+		Confirmed bool   `json:"confirmed"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// TODO(bcspragu): Let other players know what their vote was.
+
+	if !req.Confirmed {
+		// If it's not confirmed (e.g. it's just tentative), so we shouldn't count
+		// the votes.
+		return
+	}
+
+	s.consensus.RecordVote(g.ID, u.ID, req.Guess)
+
+	guess, hasConsensus := s.consensus.ReachedConsensus(g.ID, countVoters(prs, g.State.ActiveTeam))
+	if !hasConsensus {
+		return
+	}
+
+	newState, newStatus, err := game.NewForMove(g.State).Move(&game.Move{
+		Action: game.ActionGuess,
+		Team:   userPR.Team,
+		Guess:  guess,
+	})
+	if err != nil {
+		// We assume the error is the result of a bad request.
+		http.Error(w, fmt.Sprintf("failed to make move : %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// They've made the guess, clear out the consensus for the next time.
+	s.consensus.Clear(g.ID)
+
+	// Update the state in the database.
+	if err := s.db.UpdateState(g.ID, newState); err != nil {
+		http.Error(w, fmt.Sprintf("failed to update game state: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// The game is over, we should let folks know.
+	if newStatus == codenames.Finished {
+		// TODO(bcspragu): Let folks know.
+		return
+	}
+}
+
+func countVoters(prs []*codenames.PlayerRole, team codenames.Team) int {
+	cnt := 0
+	for _, pr := range prs {
+		if pr.Role == codenames.OperativeRole && pr.Team == team {
+			cnt++
+		}
+	}
+	return cnt
 }
 
 func (s *Srv) serveData(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {

@@ -11,6 +11,7 @@ require (
 	github.com/gorilla/websocket v1.4.1
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/namsral/flag v1.7.4-pre
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/net v0.0.0-20210326220855-61e056675ecf
 	google.golang.org/api v0.43.0
