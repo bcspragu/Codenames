@@ -36,8 +36,8 @@ type Board struct {
 
 // Clue is a word and a count from the Spymaster.
 type Clue struct {
-	Word  string
-	Count int
+	Word  string `json:"word"`
+	Count int    `json:"count"`
 }
 
 func (c *Clue) String() string {

@@ -145,6 +145,7 @@ type DB interface {
 
 	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
+	BatchPlayerNames([]PlayerID) (map[PlayerID]string, error)
 }
 
 func RandomGameID(r *rand.Rand) GameID {

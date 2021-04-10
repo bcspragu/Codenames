@@ -35,6 +35,7 @@ CREATE TABLE Players (
 -- TODO: Add some more fields here.
 CREATE TABLE AIs (
     id TEXT NOT NULL,
+    display_name TEXT NOT NULL,  -- Arbitary, user specified
     PRIMARY KEY (id)
 );
 

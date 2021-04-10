@@ -320,7 +320,58 @@ func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codename
 	}
 	game.Status = codenames.Playing
 
+	players, err := s.toPlayers(prs)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to make players: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.broadcastMessage(game, prs, func(g *codenames.Game) interface{} {
+		return &GameStart{
+			Game:    g,
+			Players: players,
+		}
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to send game start: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
+}
+
+func (s *Srv) toPlayers(prs []*codenames.PlayerRole) ([]*Player, error) {
+	var ids []codenames.PlayerID
+	for _, pr := range prs {
+		ids = append(ids, pr.PlayerID)
+	}
+
+	names, err := s.db.BatchPlayerNames(ids)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load player names: %w", err)
+	}
+
+	var out []*Player
+	for _, pr := range prs {
+		name, ok := names[pr.PlayerID]
+		if !ok {
+			return nil, fmt.Errorf("no name was returned for player ID %q", pr.PlayerID)
+		}
+		out = append(out, &Player{
+			PlayerID: pr.PlayerID,
+			Name:     name,
+			Team:     pr.Team,
+			Role:     pr.Role,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Srv) broadcastMessage(game *codenames.Game, prs []*codenames.PlayerRole, fn func(*codenames.Game) interface{}) error {
 	// First, send the full board to the spymasters.
+	fullMsg := fn(game)
 	for _, pr := range prs {
 		if pr.Role != codenames.SpymasterRole {
 			continue
@@ -330,18 +381,15 @@ func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codename
 		}
 
 		uID := codenames.UserID(pr.PlayerID.ID)
-		if err := s.hub.ToUser(game.ID, uID, &GameStart{
-			Game:    game,
-			Players: prs,
-		}); err != nil {
-			http.Error(w, fmt.Sprintf("failed to send game start: %v", err), http.StatusInternalServerError)
-			return
+		if err := s.hub.ToUser(game.ID, uID, fullMsg); err != nil {
+			return fmt.Errorf("failed to send spymaster msg: %w", err)
 		}
 	}
 
 	// Now, clear out the card agent colorings and send that board to everyone
 	// else.
 	game.State.Board = codenames.Revealed(game.State.Board)
+	operativeMsg := fn(game)
 	for _, pr := range prs {
 		if pr.Role != codenames.OperativeRole {
 			continue
@@ -351,18 +399,12 @@ func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codename
 		}
 
 		uID := codenames.UserID(pr.PlayerID.ID)
-		if err := s.hub.ToUser(game.ID, uID, &GameStart{
-			Game:    game,
-			Players: prs,
-		}); err != nil {
-			http.Error(w, fmt.Sprintf("failed to send game start: %v", err), http.StatusInternalServerError)
-			return
+		if err := s.hub.ToUser(game.ID, uID, operativeMsg); err != nil {
+			return fmt.Errorf("failed to send operative msg: %w", err)
 		}
 	}
 
-	jsonResp(w, struct {
-		Success bool `json:"success"`
-	}{true})
+	return nil
 }
 
 func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.User, g *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
@@ -381,15 +423,16 @@ func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.Use
 		return
 	}
 
+	clue := &codenames.Clue{
+		Word:  req.Word,
+		Count: req.Count,
+	}
 	// We don't need to check if the status changed/game is over, because giving
 	// a clue will never end the game.
 	newState, _, err := game.NewForMove(g.State).Move(&game.Move{
-		Action: game.ActionGiveClue,
-		Team:   userPR.Team,
-		GiveClue: &codenames.Clue{
-			Word:  req.Word,
-			Count: req.Count,
-		},
+		Action:   game.ActionGiveClue,
+		Team:     userPR.Team,
+		GiveClue: clue,
 	})
 	if err != nil {
 		// We assume the error is the result of a bad request.
@@ -402,6 +445,15 @@ func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.Use
 		http.Error(w, fmt.Sprintf("failed to update game state: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	// Send the clue down to everyone.
+	if err := s.hub.ToGame(g.ID, &ClueGiven{
+		Clue: clue,
+		Team: userPR.Team,
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to inform players of clue: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.User, g *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
@@ -410,8 +462,18 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		return
 	}
 
+	if userPR.Team != g.State.ActiveTeam {
+		http.Error(w, "it's not your team's turn", http.StatusBadRequest)
+		return
+	}
+
+	if g.State.ActiveRole != codenames.OperativeRole {
+		http.Error(w, "it's not time to guess", http.StatusBadRequest)
+		return
+	}
+
 	var req struct {
-		Guess     string `json:"word"`
+		Guess     string `json:"guess"`
 		Confirmed bool   `json:"confirmed"`
 	}
 
@@ -420,7 +482,14 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		return
 	}
 
-	// TODO(bcspragu): Let other players know what their vote was.
+	if err := s.hub.ToGame(g.ID, &PlayerVote{
+		UserID:    u.ID,
+		Guess:     req.Guess,
+		Confirmed: req.Confirmed,
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to inform players of vote: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	if !req.Confirmed {
 		// If it's not confirmed (e.g. it's just tentative), so we shouldn't count
@@ -435,7 +504,9 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		return
 	}
 
-	newState, newStatus, err := game.NewForMove(g.State).Move(&game.Move{
+	gfm := game.NewForMove(g.State)
+
+	newState, newStatus, err := gfm.Move(&game.Move{
 		Action: game.ActionGuess,
 		Team:   userPR.Team,
 		Guess:  guess,
@@ -455,9 +526,42 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		return
 	}
 
+	var card *codenames.Card
+	for _, c := range newState.Board.Cards {
+		if strings.ToLower(c.Codename) == strings.ToLower(guess) {
+			card = &c
+			break
+		}
+	}
+
+	if card == nil {
+		http.Error(w, fmt.Sprintf("guess %q didn't correspond to a card", guess), http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.hub.ToGame(g.ID, &GuessGiven{
+		Guess:        guess,
+		RevealedCard: card,
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to inform players of guess: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if newStatus != codenames.Finished {
+		return
+	}
+
+	over, winningTeam := gfm.GameOver()
+	if !over {
+		http.Error(w, "state was finished, but GameOver() says no", http.StatusInternalServerError)
+		return
+	}
+
 	// The game is over, we should let folks know.
-	if newStatus == codenames.Finished {
-		// TODO(bcspragu): Let folks know.
+	if err := s.hub.ToGame(g.ID, &GameEnd{
+		WinningTeam: winningTeam,
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("failed to inform players of game over: %v", err), http.StatusInternalServerError)
 		return
 	}
 }

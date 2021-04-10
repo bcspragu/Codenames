@@ -147,7 +147,7 @@ func (g *Game) Move(mv *Move) (*codenames.GameState, codenames.GameStatus, error
 	}
 
 	state := codenames.Pending
-	if over, _ := g.gameOver(); over {
+	if over, _ := g.GameOver(); over {
 		state = codenames.Finished
 	}
 
@@ -173,7 +173,7 @@ func (g *Game) handleGuess(guess string) error {
 	}
 
 	// Check if their guess ended the game.
-	if over, _ := g.gameOver(); over {
+	if over, _ := g.GameOver(); over {
 		return nil
 	}
 
@@ -260,7 +260,7 @@ func (g *Game) canKeepGuessing(card codenames.Card) bool {
 	return card.Agent == targetAgent && g.state.NumGuessesLeft != 0
 }
 
-func (g *Game) gameOver() (bool, codenames.Team) {
+func (g *Game) GameOver() (bool, codenames.Team) {
 	got := make(map[codenames.Agent]int)
 	for i, cn := range g.state.Board.Cards {
 		if g.state.Board.Cards[i].Revealed {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 
 	"github.com/bcspragu/Codenames/codenames"
 
@@ -442,6 +443,91 @@ func (s *DB) player(id codenames.PlayerID) (string, error) {
 		return "", res.err
 	}
 	return res.id, nil
+}
+
+func (s *DB) BatchPlayerNames(pIDs []codenames.PlayerID) (map[codenames.PlayerID]string, error) {
+	type result struct {
+		names map[codenames.PlayerID]string
+		err   error
+	}
+
+	var userIDArgs, aiIDArgs []interface{}
+	for _, pID := range pIDs {
+		switch pID.PlayerType {
+		case codenames.PlayerTypeHuman:
+			userIDArgs = append(userIDArgs, pID.ID)
+		case codenames.PlayerTypeRobot:
+			aiIDArgs = append(aiIDArgs, pID.ID)
+		default:
+			return nil, fmt.Errorf("unknown player type %q", pID.PlayerType)
+		}
+	}
+
+	q := fmt.Sprintf(`
+SELECT Users.display_name, Players.user_id, "user"
+FROM Players
+JOIN Users
+  ON Users.id = Players.user_id
+WHERE Users.id IN %q
+UNION ALL
+SELECT AIs.display_name, Players.ai_id, "ai"
+FROM Players
+JOIN AIs
+  ON AIs.id = Players.ai_id
+WHERE AIs.id IN %q`, groupedArgs(len(userIDArgs)), groupedArgs(len(aiIDArgs)))
+
+	var allIDArgs []interface{}
+	allIDArgs = append(userIDArgs, aiIDArgs...)
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		rows, err := sdb.Query(q, allIDArgs...)
+		if err != nil {
+			resChan <- &result{err: fmt.Errorf("failed to query names: %w", err)}
+			return
+		}
+
+		out := make(map[codenames.PlayerID]string)
+		for rows.Next() {
+			var name, id, typ string
+			if err := rows.Scan(&name, &id, &typ); err != nil {
+				resChan <- &result{err: fmt.Errorf("error scanning row: %w", err)}
+				return
+			}
+			var playerType codenames.PlayerType
+			switch typ {
+			case "user":
+				playerType = codenames.PlayerTypeHuman
+			case "ai":
+				playerType = codenames.PlayerTypeRobot
+			default:
+				resChan <- &result{err: fmt.Errorf("unexpected player type %q", typ)}
+				return
+			}
+			pID := codenames.PlayerID{PlayerType: playerType, ID: id}
+			out[pID] = name
+		}
+
+		if err := rows.Err(); err != nil {
+			resChan <- &result{err: fmt.Errorf("error scanning rows: %w", err)}
+			return
+		}
+
+		resChan <- &result{names: out}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.names, nil
+}
+
+func groupedArgs(n int) string {
+	if n <= 0 {
+		return "(NULL)"
+	}
+	return "(?" + strings.Repeat(",?", n-1) + ")"
 }
 
 func (s *DB) StartGame(gID codenames.GameID) error {
