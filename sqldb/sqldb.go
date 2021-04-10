@@ -310,7 +310,7 @@ func (s *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, error
 				userID sql.NullString
 				aiID   sql.NullString
 			)
-			if err := rows.Scan(&userID, &aiID, &pr.Role, pr.Team); err != nil {
+			if err := rows.Scan(&userID, &aiID, &pr.Role, &pr.Team); err != nil {
 				resChan <- &result{err: fmt.Errorf("failed to scan game player: %w", err)}
 				return
 			}
@@ -468,13 +468,13 @@ SELECT Users.display_name, Players.user_id, "user"
 FROM Players
 JOIN Users
   ON Users.id = Players.user_id
-WHERE Users.id IN %q
+WHERE Users.id IN %s
 UNION ALL
 SELECT AIs.display_name, Players.ai_id, "ai"
 FROM Players
 JOIN AIs
   ON AIs.id = Players.ai_id
-WHERE AIs.id IN %q`, groupedArgs(len(userIDArgs)), groupedArgs(len(aiIDArgs)))
+WHERE AIs.id IN %s`, groupedArgs(len(userIDArgs)), groupedArgs(len(aiIDArgs)))
 
 	var allIDArgs []interface{}
 	allIDArgs = append(userIDArgs, aiIDArgs...)

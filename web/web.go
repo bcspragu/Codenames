@@ -692,29 +692,34 @@ func (s *Srv) requireGameAuth(handler gameHandler) http.HandlerFunc {
 
 		u, err := s.loadUser(r)
 		if err != nil {
+			log.Println("NO USER", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		if u == nil {
+			log.Println("NO USER")
 			http.Error(w, "Not logged in", http.StatusUnauthorized)
 			return
 		}
 
 		game, err := s.db.Game(gID)
 		if err != nil {
+			log.Println("NO GAME", err)
 			http.Error(w, "failed to load game", http.StatusInternalServerError)
 			return
 		}
 
 		prs, err := s.db.PlayersInGame(gID)
 		if err != nil {
+			log.Println("NO PRS", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		userPR, ok := findRole(u.ID, prs)
 		if !ok {
+			log.Println("NO U", err)
 			http.Error(w, "You're not in this game", http.StatusForbidden)
 			return
 		}
