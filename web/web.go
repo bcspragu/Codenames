@@ -454,6 +454,10 @@ func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.Use
 		http.Error(w, fmt.Sprintf("failed to inform players of clue: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
 }
 
 func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.User, g *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) {
@@ -564,6 +568,10 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		http.Error(w, fmt.Sprintf("failed to inform players of game over: %v", err), http.StatusInternalServerError)
 		return
 	}
+
+	jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
 }
 
 func countVoters(prs []*codenames.PlayerRole, team codenames.Team) int {

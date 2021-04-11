@@ -12,10 +12,13 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/web"
 	"github.com/gorilla/websocket"
+	"github.com/olekukonko/tablewriter"
 )
 
 func main() {
@@ -78,15 +81,17 @@ func main() {
 		log.Fatalf("failed to join game: %v", err)
 	}
 
+	team, role := codenames.Team(*teamToJoin), codenames.Role(*roleToJoin)
+
 	// Now that we've joined the game, connect via WebSockets.
 	wsClient, err := client.listenForUpdates(gameID)
 	if err != nil {
 		log.Fatalf("failed to listen for update: %v", err)
 	}
 
+	reader := bufio.NewReader(os.Stdin)
 	if *gameToJoin == "" {
 		// Means we created the game, so we need to start it.
-		reader := bufio.NewReader(os.Stdin)
 		for {
 			fmt.Print("Press ENTER to start game")
 			_, _ = reader.ReadString('\n')
@@ -96,9 +101,93 @@ func main() {
 			}
 			break
 		}
-	} else {
-		wsClient.waitForGameToStart()
 	}
+
+	gameStart := wsClient.waitForGameToStart()
+
+	yourMove := role == codenames.SpymasterRole && gameStart.Game.State.ActiveTeam == team
+
+	for {
+		if yourMove {
+			switch role {
+			case codenames.SpymasterRole:
+				if err := giveAClue(client, gameID, reader); err != nil {
+					log.Fatalf("failed to give clue: %v", err)
+				}
+			case codenames.OperativeRole:
+				if err := giveAGuess(client, gameID, gameStart.Game.State.Board, reader); err != nil {
+					log.Fatalf("failed to give clue: %v", err)
+				}
+			}
+		}
+
+		wsClient.waitForTurn(team, role)
+	}
+}
+
+func giveAClue(client *client, gameID string, reader *bufio.Reader) error {
+	clue := getAClue(reader)
+	if err := client.giveClue(gameID, clue); err != nil {
+		return fmt.Errorf("failed to send clue: %w", err)
+	}
+	return nil
+}
+
+func getAClue(reader *bufio.Reader) *codenames.Clue {
+	for {
+		fmt.Print("Enter a clue: ")
+		clueStr, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("failed to read clue: %v", err)
+		}
+		clue, err := codenames.ParseClue(clueStr)
+		if err != nil {
+			fmt.Println("malformed clue, please try again")
+			continue
+		}
+		return clue
+	}
+}
+
+func giveAGuess(client *client, gameID string, board *codenames.Board, reader *bufio.Reader) error {
+	guess, confirmed := getAGuess(reader, board)
+	if err := client.giveGuess(gameID, guess, confirmed); err != nil {
+		return fmt.Errorf("failed to send guess: %w", err)
+	}
+	return nil
+}
+
+func getAGuess(reader *bufio.Reader, board *codenames.Board) (string, bool) {
+	for {
+		fmt.Print("Enter a guess: ")
+		guess, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("failed to read guess: %v", err)
+		}
+		guess = strings.ToLower(guess)
+		if !guessInCards(guess, board.Cards) {
+			fmt.Println("guess was not found on board, please try again")
+			continue
+		}
+
+		fmt.Print("Confirmed? (Y/n): ")
+		confirmedStr, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("failed to read guess: %v", err)
+		}
+		confirmed := len(confirmedStr) == 0 || strings.ToLower(confirmedStr[0:1]) == "y"
+
+		return guess, confirmed
+	}
+}
+
+func guessInCards(guess string, cards []codenames.Card) bool {
+	for _, c := range cards {
+		if guess == strings.ToLower(c.Codename) {
+			return true
+		}
+	}
+	return false
 }
 
 type client struct {
@@ -170,60 +259,40 @@ func (c *client) startGame(gID string) error {
 	return nil
 }
 
-type wsClient struct {
-	conn      *websocket.Conn
-	done      chan struct{}
-	gameStart chan *web.GameStart
-}
+func (c *client) giveClue(gID string, clue *codenames.Clue) error {
+	body := struct {
+		Word  string `json:"word"`
+		Count int    `json:"count"`
+	}{clue.Word, clue.Count}
 
-func (ws *wsClient) read() {
-	defer close(ws.done)
-	for {
-		messageType, message, err := ws.conn.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			return
-		}
-		if messageType != websocket.TextMessage {
-			continue
-		}
-
-		var justAction struct {
-			Action string `json:"action"`
-		}
-		if err := json.Unmarshal(message, &justAction); err != nil {
-			log.Println("unmarshal:", err)
-			return
-		}
-
-		switch justAction.Action {
-		case "GAME_START":
-			log.Println("GAME_START", string(message))
-			ws.handleGameStart(message)
-		case "CLUE_GIVEN":
-			log.Println("CLUE_GIVEN", string(message))
-		case "PLAYER_VOTE":
-			log.Println("PLAYER_VOTE", string(message))
-		case "GUESS_GIVEN":
-			log.Println("GUESS_GIVEN", string(message))
-		case "GAME_END":
-			log.Println("GAME_END", string(message))
-		}
-	}
-}
-
-func (ws *wsClient) handleGameStart(dat []byte) {
-	var gs web.GameStart
-	if err := json.Unmarshal(dat, &gs); err != nil {
-		log.Printf("handleGameStart: %v", err)
-		return
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/clue", toBody(body))
+	if err != nil {
+		return fmt.Errorf("failed to form request: %w", err)
 	}
 
-	ws.gameStart <- &gs
+	if err := c.do(req, nil); err != nil {
+		return fmt.Errorf("failed to give clue to game: %w", err)
+	}
+
+	return nil
 }
 
-func (ws *wsClient) waitForGameToStart() {
-	<-ws.gameStart
+func (c *client) giveGuess(gID, guess string, confirmed bool) error {
+	body := struct {
+		Guess     string `json:"guess"`
+		Confirmed bool   `json:"confirmed"`
+	}{guess, confirmed}
+
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/guess", toBody(body))
+	if err != nil {
+		return fmt.Errorf("failed to form request: %w", err)
+	}
+
+	if err := c.do(req, nil); err != nil {
+		return fmt.Errorf("failed to give clue to game: %w", err)
+	}
+
+	return nil
 }
 
 func (c *client) listenForUpdates(gID string) (*wsClient, error) {
@@ -315,4 +384,33 @@ type errReader struct {
 
 func (e *errReader) Read(_ []byte) (int, error) {
 	return 0, e.err
+}
+
+func printBoard(b *codenames.Board) {
+	table := tablewriter.NewWriter(os.Stdout)
+
+	for i := 0; i < 5; i++ {
+		var row []string
+		var colors []tablewriter.Colors
+		for j := 0; j < 5; j++ {
+			card := b.Cards[i*5+j]
+			var c tablewriter.Colors
+			switch card.Agent {
+			case codenames.BlueAgent:
+				c = append(c, tablewriter.FgBlueColor)
+			case codenames.RedAgent:
+				c = append(c, tablewriter.FgHiRedColor)
+			case codenames.Assassin:
+				c = append(c, tablewriter.BgHiRedColor)
+			}
+			if card.Revealed {
+				c = append(c, tablewriter.UnderlineSingle)
+			}
+			colors = append(colors, c)
+			row = append(row, card.Codename)
+		}
+		table.Rich(row, colors)
+	}
+
+	table.Render()
 }
