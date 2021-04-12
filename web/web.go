@@ -429,7 +429,7 @@ func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.Use
 	}
 	// We don't need to check if the status changed/game is over, because giving
 	// a clue will never end the game.
-	newState, _, err := game.NewForMove(g.State).Move(&game.Move{
+	newState, newStatus, err := game.NewForMove(g.State).Move(&game.Move{
 		Action:   game.ActionGiveClue,
 		Team:     userPR.Team,
 		GiveClue: clue,
@@ -445,11 +445,16 @@ func (s *Srv) serveClue(w http.ResponseWriter, r *http.Request, u *codenames.Use
 		http.Error(w, fmt.Sprintf("failed to update game state: %v", err), http.StatusInternalServerError)
 		return
 	}
+	g.State = newState
+	g.Status = newStatus
 
 	// Send the clue down to everyone.
-	if err := s.hub.ToGame(g.ID, &ClueGiven{
-		Clue: clue,
-		Team: userPR.Team,
+	if err := s.broadcastMessage(g, prs, func(g *codenames.Game) interface{} {
+		return &ClueGiven{
+			Clue: clue,
+			Team: userPR.Team,
+			Game: g,
+		}
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("failed to inform players of clue: %v", err), http.StatusInternalServerError)
 		return
@@ -543,9 +548,16 @@ func (s *Srv) serveGuess(w http.ResponseWriter, r *http.Request, u *codenames.Us
 		return
 	}
 
-	if err := s.hub.ToGame(g.ID, &GuessGiven{
-		Guess:        guess,
-		RevealedCard: card,
+	// Players can keep guessing if the game tells us its still their turn.
+	canKeepGuessing := newState.ActiveRole == codenames.OperativeRole && newStatus != codenames.Finished
+	if err := s.broadcastMessage(g, prs, func(g *codenames.Game) interface{} {
+		return &GuessGiven{
+			Guess:           guess,
+			Team:            userPR.Team,
+			CanKeepGuessing: canKeepGuessing,
+			RevealedCard:    card,
+			Game:            g,
+		}
 	}); err != nil {
 		http.Error(w, fmt.Sprintf("failed to inform players of guess: %v", err), http.StatusInternalServerError)
 		return

@@ -1,5 +1,3 @@
 #!/bin/bash
-go run github.com/bcspragu/Codenames/cmd/codenames-client \
-  --team_to_join="$1" \
-  --role_to_join="$2"
-
+go build github.com/bcspragu/Codenames/cmd/codenames-client 
+./codenames-client --team_to_join="$2" --role_to_join="$3" "$1"

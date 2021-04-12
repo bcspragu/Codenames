@@ -244,6 +244,7 @@ func (g *Game) reveal(word string) (codenames.Card, error) {
 
 		// If the card hasn't been reveal, reveal it.
 		g.state.Board.Cards[i].Revealed = true
+		g.state.Board.Cards[i].RevealedBy = g.state.ActiveTeam
 		return card, nil
 	}
 	return codenames.Card{}, fmt.Errorf("no card found for guess %q", word)
@@ -278,13 +279,12 @@ func (g *Game) GameOver() (bool, codenames.Team) {
 				// If we've revealed all the blue cards, the blue team has won.
 				return true, codenames.BlueTeam
 			case codenames.Assassin:
-				// If we've revealed the assassin, the not-active team wins. Though by
-				// the time we get here, we've already switched active teams.
+				// If we've revealed the assassin, the not-active team wins.
 				switch g.state.ActiveTeam {
 				case codenames.BlueTeam:
-					return true, codenames.BlueTeam
-				case codenames.RedTeam:
 					return true, codenames.RedTeam
+				case codenames.RedTeam:
+					return true, codenames.BlueTeam
 				}
 			}
 		}

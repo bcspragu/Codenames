@@ -13,11 +13,9 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/web"
-	"github.com/gorilla/websocket"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -45,10 +43,10 @@ func main() {
 		}
 	}
 
-	if len(os.Args) < 3 {
-		log.Fatal("need to specify a username and a mode")
+	if flag.NArg() < 1 {
+		log.Fatal("need to specify a username")
 	}
-	name := os.Args[1]
+	name := flag.Arg(0)
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -84,44 +82,77 @@ func main() {
 	team, role := codenames.Team(*teamToJoin), codenames.Role(*roleToJoin)
 
 	// Now that we've joined the game, connect via WebSockets.
-	wsClient, err := client.listenForUpdates(gameID)
-	if err != nil {
-		log.Fatalf("failed to listen for update: %v", err)
-	}
-
 	reader := bufio.NewReader(os.Stdin)
-	if *gameToJoin == "" {
-		// Means we created the game, so we need to start it.
-		for {
-			fmt.Print("Press ENTER to start game")
-			_, _ = reader.ReadString('\n')
-			if err := client.startGame(gameID); err != nil {
-				log.Printf("failed to start game: %v", err)
-				continue
+
+	// defer termui.Close()
+	err = client.listenForUpdates(gameID, wsHooks{
+		onConnect: func() {
+			if *gameToJoin == "" {
+				// Means we created the game, so we need to start it.
+				for {
+					fmt.Print("Press ENTER to start game")
+					_, _ = reader.ReadString('\n')
+					if err := client.startGame(gameID); err != nil {
+						log.Printf("failed to start game: %v", err)
+						continue
+					}
+					break
+				}
 			}
-			break
-		}
-	}
+		},
+		onStart: func(gs *web.GameStart) {
+			// if err := termui.Init(); err != nil {
+			// 	log.Fatalf("failed to initialize termui: %v", err)
+			// }
+			printBoard(gs.Game.State.Board)
 
-	gameStart := wsClient.waitForGameToStart()
-
-	yourMove := role == codenames.SpymasterRole && gameStart.Game.State.ActiveTeam == team
-
-	for {
-		if yourMove {
-			switch role {
-			case codenames.SpymasterRole:
+			// If the game started, and we're the starter spymaster, give a clue.
+			if role == codenames.SpymasterRole && gs.Game.State.ActiveTeam == team {
 				if err := giveAClue(client, gameID, reader); err != nil {
 					log.Fatalf("failed to give clue: %v", err)
 				}
-			case codenames.OperativeRole:
-				if err := giveAGuess(client, gameID, gameStart.Game.State.Board, reader); err != nil {
+			}
+		},
+		onClueGiven: func(cg *web.ClueGiven) {
+			fmt.Printf("Clue Given: %q %d\n", cg.Clue.Word, cg.Clue.Count)
+
+			if role != codenames.OperativeRole || team != cg.Team {
+				return
+			}
+
+			// If we're an operative, and the clue was given for our team, let's
+			// guess.
+			if err := giveAGuess(client, gameID, cg.Game.State.Board, reader); err != nil {
+				log.Fatalf("failed to give clue: %v", err)
+			}
+		},
+		onPlayerVote: func(pv *web.PlayerVote) {
+			// TODO: Show the vote
+		},
+		onGuessGiven: func(gg *web.GuessGiven) {
+			fmt.Printf("Guess was %q, card was %+v\n", gg.Guess, gg.RevealedCard)
+
+			// We're an operative on the active team and we got the last one correct
+			// and have guesses left.
+			if gg.CanKeepGuessing && role == codenames.OperativeRole && team == gg.Team {
+				if err := giveAGuess(client, gameID, gg.Game.State.Board, reader); err != nil {
 					log.Fatalf("failed to give clue: %v", err)
 				}
 			}
-		}
 
-		wsClient.waitForTurn(team, role)
+			// We're the opposing spymaster and the other team is done guessing.
+			if !gg.CanKeepGuessing && role == codenames.SpymasterRole && team != gg.Team {
+				if err := giveAClue(client, gameID, reader); err != nil {
+					log.Fatalf("failed to give clue: %v", err)
+				}
+			}
+		},
+		onEnd: func(ge *web.GameEnd) {
+			fmt.Printf("Game over, %q won!", ge.WinningTeam)
+		},
+	})
+	if err != nil {
+		log.Fatalf("failed to listen for updates: %v", err)
 	}
 }
 
@@ -140,9 +171,9 @@ func getAClue(reader *bufio.Reader) *codenames.Clue {
 		if err != nil {
 			log.Fatalf("failed to read clue: %v", err)
 		}
-		clue, err := codenames.ParseClue(clueStr)
+		clue, err := codenames.ParseClue(strings.TrimSpace(clueStr))
 		if err != nil {
-			fmt.Println("malformed clue, please try again")
+			fmt.Printf("malformed clue, please try again: %v", err)
 			continue
 		}
 		return clue
@@ -164,7 +195,7 @@ func getAGuess(reader *bufio.Reader, board *codenames.Board) (string, bool) {
 		if err != nil {
 			log.Fatalf("failed to read guess: %v", err)
 		}
-		guess = strings.ToLower(guess)
+		guess = strings.ToLower(strings.TrimSpace(guess))
 		if !guessInCards(guess, board.Cards) {
 			fmt.Println("guess was not found on board, please try again")
 			continue
@@ -175,6 +206,7 @@ func getAGuess(reader *bufio.Reader, board *codenames.Board) (string, bool) {
 		if err != nil {
 			log.Fatalf("failed to read guess: %v", err)
 		}
+		confirmedStr = strings.TrimSpace(confirmedStr)
 		confirmed := len(confirmedStr) == 0 || strings.ToLower(confirmedStr[0:1]) == "y"
 
 		return guess, confirmed
@@ -293,34 +325,6 @@ func (c *client) giveGuess(gID, guess string, confirmed bool) error {
 	}
 
 	return nil
-}
-
-func (c *client) listenForUpdates(gID string) (*wsClient, error) {
-	scheme := "ws"
-	if c.scheme == "https" {
-		scheme = "wss"
-	}
-
-	addr := scheme + "://" + c.addr + "/api/game/" + gID + "/ws"
-
-	dialer := &websocket.Dialer{
-		Proxy:            http.ProxyFromEnvironment,
-		HandshakeTimeout: 45 * time.Second,
-		Jar:              c.client.Jar,
-	}
-	conn, _, err := dialer.Dial(addr, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to server: %w", err)
-	}
-
-	wsc := &wsClient{
-		conn:      conn,
-		done:      make(chan struct{}),
-		gameStart: make(chan *web.GameStart, 1),
-	}
-	go wsc.read()
-
-	return wsc, nil
 }
 
 func (c *client) do(req *http.Request, resp interface{}) error {

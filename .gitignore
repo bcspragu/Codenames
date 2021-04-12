@@ -5,6 +5,7 @@ config
 codenames.db
 data/*.bin
 data/words.txt
+cmd/codenames-client/codenames-client
 cmd/codenames-local/codenames-local
 cmd/w2v-topn/w2v-topn
 cmd/word-server/word-server

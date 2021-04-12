@@ -7,7 +7,9 @@ import (
 )
 
 func New() *Guesser {
-	return &Guesser{}
+	return &Guesser{
+		guesses: make(map[codenames.GameID][]*Vote),
+	}
 }
 
 type Vote struct {
