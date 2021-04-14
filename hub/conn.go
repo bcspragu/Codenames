@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"log"
 	"time"
 
 	"github.com/bcspragu/Codenames/codenames"
@@ -48,6 +49,7 @@ func (c *connection) readPump() {
 	for {
 		//_, message, err := c.ws.ReadMessage()
 		_, _, err := c.ws.ReadMessage()
+		log.Println(err)
 		if err != nil {
 			break
 		}
