@@ -6,7 +6,7 @@ steps:
   image: golang:1.16
   commands:
     - export GOPROXY=https://athens.bsprague.com
-    - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+    - GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
     - go test ./...
 - name: frontend
   image: plugins/docker
