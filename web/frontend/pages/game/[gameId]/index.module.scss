@@ -1,0 +1,57 @@
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gamePage {
+}
+
+.gameBoard {
+}
+
+.gameBoardRow {
+  display: flex;
+
+  + .gameBoardRow {
+    margin-top: 8px;
+  }
+}
+
+.gameBoardCard {
+  cursor: pointer;
+  padding: 24px 36px;
+  font-size: 24px;
+  // border: 1px solid grey;
+  border-radius: 4px;
+  background-color: rgb(227, 236, 245);
+
+  &:hover:not(.revealed) {
+    color: white;
+    background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+    background-size: 400% 400%;
+    animation: gradient 2s ease infinite;
+  }
+
+  + .gameBoardCard {
+    margin-left: 8px;
+  }
+}
+
+.revealed {
+  color: white;
+
+  &.red {
+    background-color: maroon;
+  }
+
+  &.blue {
+    background-color: teal;
+  }
+}
