@@ -689,10 +689,6 @@ func (s *Srv) serveData(w http.ResponseWriter, r *http.Request, u *codenames.Use
 	return nil
 }
 
-type jsBoard struct {
-	Cards [][]codenames.Card
-}
-
 func jsonResp(w http.ResponseWriter, v interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
