@@ -106,12 +106,63 @@ generally RESTful way. The endpoints are as follows:
   game has already started, etc. These will return an error message (no JSON
   for now) and a non-200 status code.
 
-* [Not Implemented] `POST /api/game/{id}/start` - s.serveStartGame
+* `POST /api/game/{id}/start` - Kicks off the game with the given ID, can only
+  be called by the person who created the game, once all roles have been
+  filled.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/start
+  {"success": true}
+  ```
+  This will send down a WebSocket message to all connected players indicating
+  that the game is on.
 
-* [Not Implemented] `POST /api/game/{id}/clue` - s.serveClue
+* `POST /api/game/{id}/clue` - Issues a clue, to be called by the active
+  spymaster.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/clue
+  {"word": "muffins", "count": 3}
 
-* [Not Implemented]`POST /api/game/{id}/guess` - s.serveGuess
+  == Example Response ==
+  {"success": true}
+  ```
+  This will also send down a WebSocket message so that everyone gets the clue.
 
+
+* `POST /api/game/{id}/guess` - Issues a (tentative or confirmed) guess from an
+  operative player on the active team.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/guess
+  {"guess": "airplane", "confirmed": true}
+
+  == Example Response ==
+  {"success": true}
+  ```
+  The `"guess"` is the player's guess, from the cards still available on the
+  board. The `"confirmed"` indicates whether or not they're actually putting in
+  this vote, or just thinking about it. A guess will be selected once a
+  majority of operatives on the team confirm guesses. Non-confirmed guesses are
+  mostly so the UI can show what people are thinking.
+
+## WebSockets
+
+All of the live updates (game start, clues, votes, guesses, game over) are sent
+via WebSockets, so that clients can get real-time pushes with the latest status
+of the game. This is done by connecting to the WebSocket handler at
+`/api/game/{id}/ws` once the player has joined the game.
+
+All of the messages sent over WebSockets are JSON-formatted, and take the form:
+```
+{
+  "action": "GAME_START | CLUE_GIVEN | PLAYER_VOTE | GUESS_GIVEN | GAME_END",
+  ... other fields based on action ...
+}
+```
+
+Look at the code in [web/msgs.go](/web/msgs.go) for details on fields and
+message structure.
 
 ## Error Handling
 
