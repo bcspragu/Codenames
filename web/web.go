@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -137,6 +138,7 @@ func (s *Srv) handleError(h handlerFunc) http.HandlerFunc {
 		if err == nil {
 			return
 		}
+		log.Println(err)
 
 		code, userMsg := httperr.Extract(err)
 		http.Error(w, userMsg, code)
