@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"log"
 	"time"
 
 	"github.com/bcspragu/Codenames/codenames"
@@ -28,6 +29,7 @@ type connection struct {
 	h  *Hub
 	// What room this connection is associated with.
 	gameID codenames.GameID
+	userID codenames.UserID
 	// The websocket connection.
 	ws *websocket.Conn
 
@@ -47,6 +49,7 @@ func (c *connection) readPump() {
 	for {
 		//_, message, err := c.ws.ReadMessage()
 		_, _, err := c.ws.ReadMessage()
+		log.Println(err)
 		if err != nil {
 			break
 		}

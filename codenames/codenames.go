@@ -31,13 +31,13 @@ type Board struct {
 	// Cards is a list of the 25 words on the board. The zeroth card corresponds
 	// to the top-left, the fourth to the top-right, and the twenty-fourth to the
 	// bottom-right.
-	Cards []Card
+	Cards []Card `json:"cards"`
 }
 
 // Clue is a word and a count from the Spymaster.
 type Clue struct {
-	Word  string
-	Count int
+	Word  string `json:"word"`
+	Count int    `json:"count"`
 }
 
 func (c *Clue) String() string {
@@ -47,16 +47,16 @@ func (c *Clue) String() string {
 // Codename is a single game card, and its corresponding affiliation.
 type Card struct {
 	// Codename is the word on the card, the "codename" of the agent.
-	Codename string
+	Codename string `json:"codeword"`
 	// Agent is the type of the card, or UnknownAgent if the player doesn't yet
 	// know the affiliation.
-	Agent Agent
+	Agent Agent `json:"agent"`
 	// Revealed is true if the card has been guessed and the identity has been
 	// shown to operatives.
-	Revealed bool
+	Revealed bool `json:"revealed"`
 	// Revealed by is set to the team that chose this card to turnover. This is
 	// set to NoTeam unless Revealed is true.
-	RevealedBy Team
+	RevealedBy Team `json:"revealed_by"`
 }
 
 // Agent is the affiliation of a codename.
@@ -91,7 +91,7 @@ const (
 	Assassin
 )
 
-type Team int
+type Team string
 
 func (t Team) String() string {
 	switch t {
@@ -105,10 +105,21 @@ func (t Team) String() string {
 
 const (
 	// NoTeam is an error case.
-	NoTeam Team = iota
-	RedTeam
-	BlueTeam
+	NoTeam   = Team("")
+	RedTeam  = Team("RED")
+	BlueTeam = Team("BLUE")
 )
+
+func ToTeam(team string) (Team, bool) {
+	switch team {
+	case "RED":
+		return RedTeam, true
+	case "BLUE":
+		return BlueTeam, true
+	default:
+		return NoTeam, false
+	}
+}
 
 // Unused returns a list of cards that haven't been assigned an Agent type yet.
 func Unused(cards []Card) []Card {
@@ -131,12 +142,10 @@ func Targets(cards []Card, agent Agent) []Card {
 // board where the card Agent is only populated for revealed cards.
 func Revealed(b *Board) *Board {
 	out := make([]Card, len(b.Cards))
+	copy(out, b.Cards)
 	for i, card := range b.Cards {
-		out[i].Revealed = card.Revealed
-		out[i].Codename = card.Codename
-		out[i].RevealedBy = card.RevealedBy
-		if card.Revealed {
-			out[i].Agent = card.Agent
+		if !card.Revealed {
+			out[i].Agent = UnknownAgent
 		}
 	}
 	return &Board{Cards: out}

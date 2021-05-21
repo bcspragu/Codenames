@@ -3,6 +3,7 @@ package codenames
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"math/rand"
 	"strings"
 )
@@ -13,66 +14,138 @@ var (
 	ErrGameNotFound            = errors.New("codenames: game not found")
 )
 
+type PlayerType string
+
+const (
+	PlayerTypeHuman = PlayerType("human")
+	PlayerTypeRobot = PlayerType("robot")
+)
+
+type PlayerID struct {
+	PlayerType PlayerType `json:"player_type"`
+	ID         string     `json:"id"`
+}
+
+func (p PlayerID) String() string {
+	return string(p.PlayerType) + ":" + p.ID
+}
+
+func (p PlayerID) IsUser(uID UserID) bool {
+	return p.PlayerType == PlayerTypeHuman && p.ID == string(uID)
+}
+
 type UserID string
 type GameID string
 
-type GameStatus int
+type GameStatus string
 
 const (
 	// NoStatus is an error case.
-	NoStatus GameStatus = iota
+	NoStatus = GameStatus("")
 	// Game hasn't started yet.
-	Pending
+	Pending = GameStatus("PENDING")
 	// Game is in progress.
-	Playing
+	Playing = GameStatus("PLAYING")
 	// Game is pfinished.
-	PFinished
+	Finished = GameStatus("FINISHED")
 )
 
-type Role int
+type Role string
 
 const (
 	// NoRole is an error case.
-	NoRole Role = iota
-	SpymasterRole
-	OperativeRole
+	NoRole        = Role("")
+	SpymasterRole = Role("SPYMASTER")
+	OperativeRole = Role("OPERATIVE")
 )
 
+func ToRole(role string) (Role, bool) {
+	switch role {
+	case "SPYMASTER":
+		return SpymasterRole, true
+	case "OPERATIVE":
+		return OperativeRole, true
+	default:
+		return NoRole, false
+	}
+}
+
 type User struct {
-	ID UserID
+	ID UserID `json:"id"`
 	// Name is the name that gets displayed. It should arguably be called
 	// DisplayName, but who's got time to type out all those letters.
-	Name string
+	Name string `json:"name"`
 }
 
 type Game struct {
-	ID        GameID
-	CreatedBy UserID
-	Status    GameStatus
-	State     *GameState
+	ID        GameID     `json:"id"`
+	CreatedBy UserID     `json:"created_by"`
+	Status    GameStatus `json:"status"`
+	State     *GameState `json:"state"`
 }
 
 type GameState struct {
-	ActiveTeam Team
-	ActiveRole Role
-	Board      *Board
+	ActiveTeam     Team   `json:"active_team"`
+	ActiveRole     Role   `json:"active_role"`
+	Board          *Board `json:"board"`
+	NumGuessesLeft int    `json:"num_guesses_left"`
+	StartingTeam   Team   `json:"starting_team"`
 }
 
-type JoinRequest struct {
-	UserID UserID
-	Team   Team
-	Role   Role
+type PlayerRole struct {
+	PlayerID PlayerID `json:"player_id"`
+	Team     Team     `json:"team"`
+	Role     Role     `json:"role"`
+}
+
+func AllRolesFilled(prs []*PlayerRole) error {
+	roleCount := make(map[Team]map[Role]int)
+	for _, pr := range prs {
+		rc, ok := roleCount[pr.Team]
+		if !ok {
+			rc = make(map[Role]int)
+		}
+		rc[pr.Role]++
+		roleCount[pr.Team] = rc
+	}
+	count := func(team Team, role Role) int {
+		rm, ok := roleCount[team]
+		if !ok {
+			return 0
+		}
+		return rm[role]
+	}
+	teams := []Team{BlueTeam, RedTeam}
+
+	for _, t := range teams {
+		switch n := count(t, SpymasterRole); n {
+		case 0:
+			return fmt.Errorf("team %q had no spymaster", t)
+		case 1:
+			// Good
+		default:
+			return fmt.Errorf("team %q somehow has %d spymasters", t, n)
+		}
+		if count(t, OperativeRole) == 0 {
+			return fmt.Errorf("team %q had no operatives", t)
+		}
+	}
+	return nil
 }
 
 type DB interface {
-	NewGame(*Game) (GameID, error)
 	NewUser(*User) (UserID, error)
-
 	User(UserID) (*User, error)
 
+	NewGame(*Game) (GameID, error)
+	StartGame(gID GameID) error
 	PendingGames() ([]GameID, error)
-	JoinGame(GameID, *JoinRequest) error
+	Game(GameID) (*Game, error)
+	JoinGame(GameID, *PlayerRole) error
+
+	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
+	BatchPlayerNames([]PlayerID) (map[PlayerID]string, error)
 }
 
 func RandomGameID(r *rand.Rand) GameID {
@@ -84,6 +157,14 @@ func RandomGameID(r *rand.Rand) GameID {
 }
 
 var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+func RandomPlayerID(r *rand.Rand) string {
+	b := make([]byte, 64)
+	for i := range b {
+		b[i] = letters[r.Intn(len(letters))]
+	}
+	return string(b)
+}
 
 func RandomUserID(r *rand.Rand) UserID {
 	b := make([]byte, 64)
