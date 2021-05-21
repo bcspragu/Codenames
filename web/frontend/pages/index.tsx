@@ -10,7 +10,7 @@ export default function Home() {
       </Link>{' '}
       or{' '}
       <Link href='/game/someBogusId'>
-        <a>/game/[whateverId]</a>
+        <a>/game/[whateverIdForNow]</a>
       </Link>{' '}
       to explore
     </div>
