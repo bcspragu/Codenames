@@ -399,7 +399,7 @@ func (s *DB) createPlayer(id codenames.PlayerID) (string, error) {
 			return
 		}
 		if _, err := sdb.Exec(createPlayerStmt, pID, userID, aiID); err != nil {
-			resChan <- &result{err: fmt.Errorf("failed to insert player", err)}
+			resChan <- &result{err: fmt.Errorf("failed to insert player: %w", err)}
 			return
 		}
 		resChan <- &result{id: pID}

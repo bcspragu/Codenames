@@ -34,7 +34,7 @@ func main() {
 
 	sc, err := loadKeys()
 	if err != nil {
-		log.Fatalf("failed to load cookie keys: %w", err)
+		log.Fatalf("failed to load cookie keys: %v", err)
 	}
 
 	c := make(chan os.Signal, 1)
