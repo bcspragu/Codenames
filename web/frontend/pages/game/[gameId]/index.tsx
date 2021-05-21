@@ -4,143 +4,12 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import cn from 'classnames';
 
-const dummyWordSet: CardSet = [
-  [
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-  ],
-  [
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-  ],
-  [
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-  ],
-  [
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-  ],
-  [
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-    {
-      word: 'foo',
-      team: 'blue',
-      revealed: false,
-    },
-  ],
-];
+/**
+ * Notes
+ *
+ * Team assignments should not be visible anywhere client side except to spymasters or after a card has been clicked/revealed.
+ * Server should have assignments stored (by id)
+ */
 
 type Team = 'red' | 'blue' | 'neutral' | 'death';
 
@@ -165,9 +34,9 @@ function shuffleArray(array) {
 }
 
 const getAssignCardSetClientSideWhichMakesNoSense = (
-  words: string[]
+  words: string[],
+  firstTeam: 'red' | 'blue'
 ): CardSet => {
-  const firstTeam = Math.random() < 0.5 ? 'red' : 'blue';
   const secondTeam = firstTeam === 'red' ? 'blue' : 'red';
 
   const deck = words.map((word, i) => {
@@ -214,7 +83,8 @@ const getAssignCardSetClientSideWhichMakesNoSense = (
 export default function Game() {
   const router = useRouter();
   const { gameId } = router.query;
-  const [cardSet, setCardSet] = useState<CardSet | null>(dummyWordSet);
+  const [cardSet, setCardSet] = useState<CardSet | null>();
+  const [firstTeam, setFirstTeam] = useState<'red' | 'blue'>('red');
 
   useEffect(() => {
     const setInitialState = async () => {
@@ -222,13 +92,16 @@ export default function Game() {
         await fetch('https://random-word-api.herokuapp.com/word?number=25')
       ).json();
 
-      setCardSet(getAssignCardSetClientSideWhichMakesNoSense(randomWords));
+      const firstTeam = Math.random() < 0.5 ? 'red' : 'blue';
+
+      setCardSet(
+        getAssignCardSetClientSideWhichMakesNoSense(randomWords, firstTeam)
+      );
+      setFirstTeam(firstTeam);
     };
 
     setInitialState();
   }, [null]);
-
-  console.log(cardSet);
 
   const renderGameBoard = () => {
     if (!cardSet) {
@@ -286,6 +159,7 @@ export default function Game() {
   return (
     <div className='game-page'>
       <div>Game id: {gameId}</div>
+      {cardSet && <div>First team (9 cards): {firstTeam}</div>}
       {renderGameBoard()}
     </div>
   );
