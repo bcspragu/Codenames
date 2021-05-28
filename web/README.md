@@ -91,6 +91,9 @@ generally RESTful way. The endpoints are as follows:
     }
   }
   ```
+  Note that this endpoint requires an authenticated user, but doesn't require
+  you to be in the game. If you aren't in the game (or are, but aren't the
+  spymaster).
 
 * `POST /api/game/{id}/join` - Joins the game with the given ID.
   ```
@@ -162,7 +165,84 @@ All of the messages sent over WebSockets are JSON-formatted, and take the form:
 ```
 
 Look at the code in [web/msgs.go](/web/msgs.go) for details on fields and
-message structure.
+message structure, or look at the handy guide below:
+
+* `GAME_START`
+  ```
+  {
+    "action": "GAME_START",
+    "players": [
+      {
+        "player_id": "abc123",
+        "name": "Test McTesterson",
+        "team": "RED",
+        "role": "SPYMASTER",
+      },
+      ... more users ...
+    ],
+    "game": {
+      "id": "TheGameID123",
+      "created_by": "user_id_123",
+      "status": "PENDING",
+      "state": {
+        "active_team": "RED",
+        "active_role": "SPYMASTER",
+        "board": {
+          "cards": [
+            {"codeword": "watch", "agent": "UNKNOWN_AGENT", "revealed": false, "revealed_by": "NO_TEAM"},
+            {"codeword": "time", "agent": "RED", "revealed": true, "revealed_by": "RED"},
+            [ ... ]
+          ]
+        }
+      }
+    }
+  }
+  ```
+* `CLUE_GIVEN`
+  ```
+  {
+    "action": "CLUE_GIVEN",
+    "clue": {
+      "word": "helicopters",
+      "count": 3
+    },
+    "team": "BLUE",
+    "game": {... see above ...}
+  }
+  ```
+* `PLAYER_VOTE`
+  ```
+  {
+    "action": "PLAYER_VOTE",
+    "user_id": "abc123",
+    "guess": "blade",
+    "confirmed": true
+  }
+  ```
+* `GUESS_GIVEN`
+  ```
+  {
+    "action": "GUESS_GIVEN",
+    "guess": "blade",
+    "team": "BLUE",
+    "can_keep_guessing": true,
+    "card": {
+      "codeword": "blade",
+      "agent": "BLUE",
+      "revealed": true,
+      "revealed_by": "BLUE"
+    },
+    "game": {... see above ...}
+  }
+  ```
+* `GAME_END`
+  ```
+  {
+    "action": "GAME_END",
+    "winning_team": "BLUE",
+    "game": {... see above ...}
+  }
+  ```
 
 ## Error Handling
 
