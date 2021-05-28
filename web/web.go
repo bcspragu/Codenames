@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -86,7 +87,7 @@ func (s *Srv) initMux() *mux.Router {
 		{
 			path:        "/api/game/{id}",
 			method:      http.MethodGet,
-			handlerFunc: s.requireGameAuth(s.serveGame),
+			handlerFunc: s.serveGame,
 		},
 		// Join game.
 		{
@@ -137,6 +138,7 @@ func (s *Srv) handleError(h handlerFunc) http.HandlerFunc {
 		if err == nil {
 			return
 		}
+		log.Println(err)
 
 		code, userMsg := httperr.Extract(err)
 		http.Error(w, userMsg, code)
@@ -232,10 +234,35 @@ func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) error {
 	return jsonResp(w, gIDs)
 }
 
-func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
-	// If you ain't a spymaster, you don't get to see what color all the cards
-	// are.
-	if userPR.Role != codenames.SpymasterRole {
+func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) error {
+	gID, err := s.gameIDFromRequest(r)
+	if err != nil {
+		return err
+	}
+
+	u, err := s.loadUserRequired(r)
+	if err != nil {
+		return err
+	}
+
+	game, err := s.db.Game(gID)
+	if err != nil {
+		return httperr.
+			Internal("failed to load game %q: %w", gID, err).
+			WithMessage("failed to load game")
+	}
+
+	prs, err := s.db.PlayersInGame(gID)
+	if err != nil {
+		return httperr.
+			Internal("failed to load players in game %q: %w", gID, err).
+			WithMessage("failed to load players in game")
+	}
+
+	userPR, ok := findRole(u.ID, prs)
+	// If you aren't in this game or ain't a spymaster, you don't get to see what
+	// color all the cards are, that's [REDACTED].
+	if !ok || userPR.Role != codenames.SpymasterRole {
 		game.State.Board = codenames.Revealed(game.State.Board)
 	}
 
@@ -687,10 +714,6 @@ func (s *Srv) serveData(w http.ResponseWriter, r *http.Request, u *codenames.Use
 	s.hub.Register(conn, game.ID, u.ID)
 
 	return nil
-}
-
-type jsBoard struct {
-	Cards [][]codenames.Card
 }
 
 func jsonResp(w http.ResponseWriter, v interface{}) error {

@@ -77,7 +77,7 @@ func (ws *wsClient) read() error {
 		case "GAME_END":
 			ws.handleGameEnd(message)
 		default:
-			log.Println("unknown message action %q", justAction.Action)
+			log.Printf("unknown message action %q", justAction.Action)
 		}
 	}
 }

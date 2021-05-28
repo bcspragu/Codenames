@@ -3,22 +3,23 @@ name: default
 
 steps:
 - name: backend
-  image: golang:1.13
+  image: golang:1.16
   commands:
-    - export GO111MODULE=on
     - export GOPROXY=https://athens.bsprague.com
-    - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+    - GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
     - go test ./...
 - name: frontend
-  image: node:alpine
-  commands:
-    - cd web/frontend
-    - yarn
-    - yarn build
-  volumes:
-    - name: nodecache
-      path: /drone/src/web/frontend/node_modules
-- name: docker
+  image: plugins/docker
+  settings:
+    repo: docker.bsprague.com/codenames-frontend
+    registry: docker.bsprague.com
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    dockerfile: web/frontend/Dockerfile
+    context: web/frontend/
+- name: docker-backend
   image: plugins/docker
   settings:
     repo: docker.bsprague.com/codenames
@@ -29,18 +30,9 @@ steps:
       from_secret: docker_password
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
-- name: scp
-  image: appleboy/drone-scp
-  settings:
-    host: prod.bsprague.com
-    username:
-      from_secret: ssh_username
-    key:
-      from_secret: ssh_key
-    target: /srv/www/codenames.ai
-    source: web/frontend/dist/*
-    rm: true
-    strip_components: 3
+  when:
+    branch:
+    - master
 - name: ssh
   image: appleboy/drone-ssh
   settings:
@@ -51,10 +43,7 @@ steps:
       from_secret: ssh_key
     script:
       - sudo systemctl restart codenames.service
-
-volumes:
-- name: nodecache
-  host:
-    path: /tmp/nodecache
-
-branches: master
+      - sudo systemctl restart codenames-frontend.service
+  when:
+    branch:
+    - master
