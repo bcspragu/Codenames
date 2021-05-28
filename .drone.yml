@@ -30,6 +30,9 @@ steps:
       from_secret: docker_password
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
+  when:
+    branch:
+    - master
 - name: ssh
   image: appleboy/drone-ssh
   settings:
@@ -41,5 +44,6 @@ steps:
     script:
       - sudo systemctl restart codenames.service
       - sudo systemctl restart codenames-frontend.service
-
-branches: master
+  when:
+    branch:
+    - master
