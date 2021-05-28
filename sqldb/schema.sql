@@ -16,8 +16,9 @@ CREATE TABLE Games (
 CREATE TABLE GamePlayers (
     game_id TEXT NOT NULL,
     player_id TEXT NOT NULL, -- We use a player ID instead of a user ID to handle AIs in the future.
-    role TEXT NOT NULL,  -- Enum: SPYMASTER, OPERATIVE
-    team TEXT NOT NULL,  -- Enum: RED, BLUE
+    role_assigned BOOLEAN NOT NULL CHECK (role_assigned IN (0, 1)),
+    role TEXT,  -- Enum: SPYMASTER, OPERATIVE
+    team TEXT,  -- Enum: RED, BLUE
     FOREIGN KEY (game_id) REFERENCES Games(id),
     FOREIGN KEY (player_id) REFERENCES Players(id),
     PRIMARY KEY (game_id, player_id)

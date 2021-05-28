@@ -65,6 +65,12 @@ func (s *Srv) initMux() *mux.Router {
 			method:      http.MethodPost,
 			handlerFunc: s.serveCreateUser,
 		},
+		// Edit a user
+		{
+			path:        "/api/user",
+			method:      http.MethodPatch,
+			handlerFunc: s.serveUpdateUser,
+		},
 		// Load user.
 		{
 			path:        "/api/user",
@@ -87,31 +93,37 @@ func (s *Srv) initMux() *mux.Router {
 		{
 			path:        "/api/game/{id}",
 			method:      http.MethodGet,
-			handlerFunc: s.serveGame,
+			handlerFunc: s.requireGameAuth(s.serveGame),
 		},
 		// Join game.
 		{
 			path:        "/api/game/{id}/join",
 			method:      http.MethodPost,
-			handlerFunc: s.serveJoinGame,
+			handlerFunc: s.requireGameAuth(s.serveJoinGame, isGamePending()),
+		},
+		// Assign roles
+		{
+			path:        "/api/game/{id}/assignRole",
+			method:      http.MethodPost,
+			handlerFunc: s.requireGameAuth(s.serveAssignRole, isGameCreator(), isGamePending()),
 		},
 		// Start game.
 		{
 			path:        "/api/game/{id}/start",
 			method:      http.MethodPost,
-			handlerFunc: s.requireGameAuth(s.serveStartGame),
+			handlerFunc: s.requireGameAuth(s.serveStartGame, isGameCreator(), isGamePending()),
 		},
 		// Serve a clue to a game.
 		{
 			path:        "/api/game/{id}/clue",
 			method:      http.MethodPost,
-			handlerFunc: s.requireGameAuth(s.serveClue),
+			handlerFunc: s.requireGameAuth(s.serveClue, isSpymaster()),
 		},
 		// Serve a card guess to a game.
 		{
 			path:        "/api/game/{id}/guess",
 			method:      http.MethodPost,
-			handlerFunc: s.requireGameAuth(s.serveGuess),
+			handlerFunc: s.requireGameAuth(s.serveGuess, isOperative()),
 		},
 		// WebSocket handler for games.
 		{
@@ -185,6 +197,17 @@ func (s *Srv) serveCreateUser(w http.ResponseWriter, r *http.Request) error {
 	}{true})
 }
 
+func (s *Srv) serveUpdateUser(w http.ResponseWriter, r *http.Request) error {
+	u, err := s.loadUser(r)
+	if err != nil {
+		return err
+	}
+
+	// TODO(bcspragu): Allow updating the user.
+
+	return jsonResp(w, u)
+}
+
 func (s *Srv) serveUser(w http.ResponseWriter, r *http.Request) error {
 	u, err := s.loadUser(r)
 	if err != nil {
@@ -234,54 +257,56 @@ func (s *Srv) servePendingGames(w http.ResponseWriter, r *http.Request) error {
 	return jsonResp(w, gIDs)
 }
 
-func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request) error {
-	gID, err := s.gameIDFromRequest(r)
-	if err != nil {
-		return err
-	}
-
-	u, err := s.loadUserRequired(r)
-	if err != nil {
-		return err
-	}
-
-	game, err := s.db.Game(gID)
-	if err != nil {
-		return httperr.
-			Internal("failed to load game %q: %w", gID, err).
-			WithMessage("failed to load game")
-	}
-
-	prs, err := s.db.PlayersInGame(gID)
-	if err != nil {
-		return httperr.
-			Internal("failed to load players in game %q: %w", gID, err).
-			WithMessage("failed to load players in game")
-	}
-
-	userPR, ok := findRole(u.ID, prs)
+func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
 	// If you aren't in this game or ain't a spymaster, you don't get to see what
 	// color all the cards are, that's [REDACTED].
-	if !ok || userPR.Role != codenames.SpymasterRole {
+	if userPR == nil || userPR.Role != codenames.SpymasterRole {
 		game.State.Board = codenames.Revealed(game.State.Board)
 	}
 
 	return jsonResp(w, game)
 }
 
-func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
-	gID, err := s.gameIDFromRequest(r)
-	if err != nil {
-		return err
+func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
+	if userPR != nil {
+		// They've already joined the game, just return success because we'd
+		// probably fail trying to add them again.
+		return jsonResp(w, struct {
+			Success bool `json:"success"`
+		}{true})
 	}
 
+	pID := codenames.PlayerID{
+		PlayerType: codenames.PlayerTypeHuman,
+		ID:         string(u.ID),
+	}
+	if err := s.db.JoinGame(game.ID, pID); err != nil {
+		return httperr.
+			Internal("failed to join game %q with user %q: %w", game.ID, u.ID, err).
+			WithMessage("failed to join game")
+	}
+
+	return jsonResp(w, struct {
+		Success bool `json:"success"`
+	}{true})
+}
+
+func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
 	var req struct {
-		Team string `json:"team"`
-		Role string `json:"role"`
+		UserID string `json:"user_id"`
+		Team   string `json:"team"`
+		Role   string `json:"role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return httperr.BadRequest("failed to decode join game request: %w", err)
+	}
+
+	u, err := s.db.User(codenames.UserID(req.UserID))
+	if err != nil {
+		return httperr.
+			BadRequest("failed to load user %q in assignRole: %w", req.UserID, err).
+			WithMessage("bad user ID given")
 	}
 
 	desiredRole, ok := codenames.ToRole(req.Role)
@@ -298,30 +323,6 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
 			WithMessage("bad team")
 	}
 
-	u, err := s.loadUserRequired(r)
-	if err != nil {
-		return err
-	}
-
-	game, err := s.db.Game(gID)
-	if err != nil {
-		return httperr.
-			Internal("failed to load game %q: %w", gID, err).
-			WithMessage("failed to load game")
-	}
-
-	if game.Status != codenames.Pending {
-		return httperr.
-			BadRequest("user %q tried to join game %q in state %q", u.ID, gID, game.Status).
-			WithMessage("can only join pending games")
-	}
-
-	prs, err := s.db.PlayersInGame(gID)
-	if err != nil {
-		return httperr.
-			Internal("failed to load players in game %q: %w", gID, err).
-			WithMessage("failed to load players in game")
-	}
 	roleCount := make(map[codenames.Role]map[codenames.Team]int)
 	for _, pr := range prs {
 		rc, ok := roleCount[pr.Role]
@@ -330,17 +331,17 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
 		}
 		if pr.PlayerID.IsUser(u.ID) {
 			return httperr.
-				BadRequest("user %q tried to join game %q as %q %q, already joined as %q %q", u.ID, gID, desiredTeam, desiredRole, pr.Team, pr.Role).
+				BadRequest("user %q tried to join game %q as %q %q, already joined as %q %q", u.ID, game.ID, desiredTeam, desiredRole, pr.Team, pr.Role).
 				WithMessage(fmt.Sprintf("can't join game as %q %q, already joined as %q %q", desiredTeam, desiredRole, pr.Team, pr.Role))
 		}
 		if pr.Role == codenames.SpymasterRole && rc[pr.Team] > 1 {
 			return httperr.
-				Internal("game %q in bad state, has multiple players has %q spymaster", gID, pr.Team).
+				Internal("game %q in bad state, has multiple players has %q spymaster", game.ID, pr.Team).
 				WithMessage(fmt.Sprintf("multiple players set as %q spymaster", pr.Team))
 		}
 		if pr.Role == codenames.OperativeRole && rc[pr.Team] > maxOperativesPerTeam {
 			return httperr.
-				Internal("game %q in bad state, has too many players as %q operatives", gID, pr.Team).
+				Internal("game %q in bad state, has too many players as %q operatives", game.ID, pr.Team).
 				WithMessage(fmt.Sprintf("too many players set as %q operatives", pr.Team))
 		}
 		rc[pr.Team]++
@@ -349,16 +350,16 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
 
 	if desiredRole == codenames.SpymasterRole && roleCount[codenames.SpymasterRole][desiredTeam] > 0 {
 		return httperr.
-			BadRequest("user %q wanted to be %q spymaster, but that role is already filled in game %q", u.ID, desiredTeam, gID).
+			BadRequest("user %q wanted to be %q spymaster, but that role is already filled in game %q", u.ID, desiredTeam, game.ID).
 			WithMessage(fmt.Sprintf("team %q already has a spymaster", desiredTeam))
 	}
 	if desiredRole == codenames.OperativeRole && roleCount[codenames.OperativeRole][desiredTeam] >= maxOperativesPerTeam {
 		return httperr.
-			BadRequest("user %q wanted to be a %q operative, but that team already has the max number of operatives in game %q", u.ID, desiredTeam, gID).
+			BadRequest("user %q wanted to be a %q operative, but that team already has the max number of operatives in game %q", u.ID, desiredTeam, game.ID).
 			WithMessage(fmt.Sprintf("team %q already has max operatives", desiredTeam))
 	}
 
-	if err := s.db.JoinGame(gID, &codenames.PlayerRole{
+	if err := s.db.AssignRole(game.ID, &codenames.PlayerRole{
 		PlayerID: codenames.PlayerID{
 			PlayerType: codenames.PlayerTypeHuman,
 			ID:         string(u.ID),
@@ -367,8 +368,8 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
 		Role: desiredRole,
 	}); err != nil {
 		return httperr.
-			Internal("failed to join game %q with user %q, as %q %q: %w", gID, u.ID, desiredTeam, desiredRole, err).
-			WithMessage("failed to join game")
+			Internal("failed to assign role (%q, %q) to player %q in game %q: %w", desiredTeam, desiredRole, u.ID, game.ID, err).
+			WithMessage("failed to assign role to player")
 	}
 
 	return jsonResp(w, struct {
@@ -377,18 +378,6 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
-	if game.CreatedBy != u.ID {
-		return httperr.
-			Forbidden("user %q tried to start game %q, which was created by %q", u.ID, game.ID, game.CreatedBy).
-			WithMessage("only the game creator can start the game")
-	}
-
-	if game.Status != codenames.Pending {
-		return httperr.
-			BadRequest("user %q tried to start game %q, which was in state %q", u.ID, game.ID, game.Status).
-			WithMessage("can only start pending games")
-	}
-
 	if err := codenames.AllRolesFilled(prs); err != nil {
 		return httperr.
 			BadRequest("user %q tried to start game %q, but not all roles are filled: %w", u.ID, game.ID, err).
@@ -774,8 +763,51 @@ func (s *Srv) loadUser(r *http.Request) (*codenames.User, error) {
 
 type gameHandler func(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error
 
-func (s *Srv) requireGameAuth(handler gameHandler) handlerFunc {
+type gameAuthOption func(*gameAuthOptions)
+
+func isGameCreator() gameAuthOption {
+	return func(opts *gameAuthOptions) {
+		opts.isGameCreator = true
+	}
+}
+
+func isGamePending() gameAuthOption {
+	return isGameStatus(codenames.Pending)
+}
+
+func isGameStatus(gs codenames.GameStatus) gameAuthOption {
+	return func(opts *gameAuthOptions) {
+		opts.wantGameStatus = gs
+	}
+}
+
+func isSpymaster() gameAuthOption {
+	return isRole(codenames.SpymasterRole)
+}
+
+func isOperative() gameAuthOption {
+	return isRole(codenames.OperativeRole)
+}
+
+func isRole(r codenames.Role) gameAuthOption {
+	return func(opts *gameAuthOptions) {
+		opts.wantRole = r
+	}
+}
+
+type gameAuthOptions struct {
+	isGameCreator  bool
+	wantRole       codenames.Role
+	wantGameStatus codenames.GameStatus
+}
+
+func (s *Srv) requireGameAuth(handler gameHandler, opts ...gameAuthOption) handlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) error {
+		gOpts := &gameAuthOptions{}
+		for _, opt := range opts {
+			opt(gOpts)
+		}
+
 		gID, err := s.gameIDFromRequest(r)
 		if err != nil {
 			return err
@@ -793,6 +825,18 @@ func (s *Srv) requireGameAuth(handler gameHandler) handlerFunc {
 				WithMessage("failed to load game")
 		}
 
+		if gOpts.isGameCreator && game.CreatedBy != u.ID {
+			return httperr.
+				Forbidden("user %q tried to do an admin action on game %q, which was created by %q", u.ID, game.ID, game.CreatedBy).
+				WithMessage("only the game creator can perform this action")
+		}
+
+		if gOpts.wantGameStatus != codenames.NoStatus && gOpts.wantGameStatus != game.Status {
+			return httperr.
+				BadRequest("user %q tried to act on game %q in state %q, can only act if state %q", u.ID, gID, game.Status, gOpts.wantGameStatus).
+				WithMessage("the game isn't in a state where you can do that")
+		}
+
 		prs, err := s.db.PlayersInGame(gID)
 		if err != nil {
 			return httperr.
@@ -801,10 +845,10 @@ func (s *Srv) requireGameAuth(handler gameHandler) handlerFunc {
 		}
 
 		userPR, ok := findRole(u.ID, prs)
-		if !ok {
+		if !ok && gOpts.wantRole != codenames.NoRole {
 			return httperr.
 				Forbidden("user %q is not in game %q", u.ID, gID).
-				WithMessage("user is not in this game")
+				WithMessage("you need to join this game first")
 		}
 
 		return handler(w, r, u, game, userPR, prs)

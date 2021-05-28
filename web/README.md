@@ -24,6 +24,9 @@ generally RESTful way. The endpoints are as follows:
   The important thing is to make sure the client is actually respecting the
   `Set-Cookie` response header, or auth won't actually work.
 
+* `PATCH /api/user` - Updates the logged in user.
+  NOTE: This isn't actually implemented yet.
+
 * `GET /api/user` - Loads information about the currently logged in user,
   returns `null` if there's no authentication header, or the account isn't
   found, etc, etc.
@@ -95,11 +98,31 @@ generally RESTful way. The endpoints are as follows:
   you to be in the game. If you aren't in the game (or are, but aren't the
   spymaster).
 
-* `POST /api/game/{id}/join` - Joins the game with the given ID.
+* `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
+  select roles, they just join games. The host will then assign roles to the
+  users in a given game.
+
   ```
   == Example Request ==
   POST /api/game/TheGameID123/join
-  {"team": "RED", "role": "SPYMASTER"}
+  {}
+
+  == Example Response ==
+  {"success": true}
+  ```
+  This adds the user to the lobby for a game.
+
+* `POST /api/game/{id}/assignRole` - Assigns a role to a given player, can only
+  be called by hosts before the game starts.
+
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/assignRole
+  {
+    "user_id": "abc123",
+    "team": "RED",
+    "role": "SPYMASTER"
+  }
 
   == Example Response ==
   {"success": true}

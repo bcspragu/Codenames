@@ -93,9 +93,10 @@ type GameState struct {
 }
 
 type PlayerRole struct {
-	PlayerID PlayerID `json:"player_id"`
-	Team     Team     `json:"team"`
-	Role     Role     `json:"role"`
+	PlayerID     PlayerID `json:"player_id"`
+	Team         Team     `json:"team"`
+	Role         Role     `json:"role"`
+	RoleAssigned bool     `json:"role_assigned"`
 }
 
 func AllRolesFilled(prs []*PlayerRole) error {
@@ -141,7 +142,8 @@ type DB interface {
 	StartGame(gID GameID) error
 	PendingGames() ([]GameID, error)
 	Game(GameID) (*Game, error)
-	JoinGame(GameID, *PlayerRole) error
+	JoinGame(GameID, PlayerID) error
+	AssignRole(GameID, *PlayerRole) error
 
 	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
