@@ -276,7 +276,9 @@ func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request, u *codenames.Use
 func (s *Srv) serveGamePlayers(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
 	players, err := s.toPlayers(prs)
 	if err != nil {
-		return err
+		return httperr.
+			Internal("failed to convert players in game %q: %w", game.ID, err).
+			WithMessage("failed to make players")
 	}
 
 	return jsonResp(w, players)
@@ -391,9 +393,21 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 			WithMessage("failed to assign role to player")
 	}
 
-	return jsonResp(w, struct {
-		Success bool `json:"success"`
-	}{true})
+	// Load the updated list of players in the game.
+	if prs, err = s.db.PlayersInGame(game.ID); err != nil {
+		return httperr.
+			Internal("failed to load players in game %q: %w", game.ID, err).
+			WithMessage("failed to load players in game")
+	}
+
+	players, err := s.toPlayers(prs)
+	if err != nil {
+		return httperr.
+			Internal("failed to convert players in game %q: %w", game.ID, err).
+			WithMessage("failed to make players")
+	}
+
+	return jsonResp(w, players)
 }
 
 func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
