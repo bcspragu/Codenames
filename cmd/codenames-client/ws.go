@@ -44,6 +44,7 @@ func (c *client) listenForUpdates(gID string, hooks wsHooks) error {
 		done:  make(chan struct{}),
 		hooks: hooks,
 	}
+
 	return wsc.read()
 }
 
@@ -54,6 +55,12 @@ func (ws *wsClient) read() error {
 		if err != nil {
 			return fmt.Errorf("ReadMessage: %w", err)
 		}
+		if messageType == websocket.PingMessage {
+			if err := ws.conn.WriteMessage(websocket.PongMessage, []byte{}); err != nil {
+				return fmt.Errorf("failed to send pong: %w", err)
+			}
+		}
+
 		if messageType != websocket.TextMessage {
 			continue
 		}

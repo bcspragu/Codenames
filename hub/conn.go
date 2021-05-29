@@ -47,13 +47,11 @@ func (c *connection) readPump() {
 	c.ws.SetReadDeadline(time.Now().Add(pongWait))
 	c.ws.SetPongHandler(func(string) error { c.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
-		//_, message, err := c.ws.ReadMessage()
 		_, _, err := c.ws.ReadMessage()
-		log.Println(err)
 		if err != nil {
+			log.Printf("failed to read WebSocket message from client: %v", err)
 			break
 		}
-		// TODO(bcspragu): Make sure we don't have any legitimate uses for incoming WS frames
 	}
 }
 
@@ -78,10 +76,12 @@ func (c *connection) writePump() {
 				return
 			}
 			if err := c.write(websocket.TextMessage, message); err != nil {
+				log.Printf("failed to write WebSocket message: %v", err)
 				return
 			}
 		case <-ticker.C:
 			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
+				log.Printf("failed to write WebSocket ping: %v", err)
 				return
 			}
 		}
