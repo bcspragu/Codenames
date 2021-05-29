@@ -98,6 +98,25 @@ generally RESTful way. The endpoints are as follows:
   you to be in the game. If you aren't in the game (or are, but aren't the
   spymaster).
 
+* `GET /api/game/{id}/players` - Returns a list of all the players who've
+  joined the game, useful for showing the lobby and whatnot.
+  ```
+  == Example Request ==
+  GET /api/game/TheGameID123/players
+  {} // No body or anything
+
+  == Example Response ==
+  [
+    {
+      "player_id": {"player_type": "human", "id": "abc123"},
+      "name": "Testy McTesterson",
+      "team": "BLUE",
+      "role": "SPYMASTER",
+    },
+    {... more players ...}
+  ]
+  ```
+
 * `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
   select roles, they just join games. The host will then assign roles to the
   users in a given game.

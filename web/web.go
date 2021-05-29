@@ -95,6 +95,12 @@ func (s *Srv) initMux() *mux.Router {
 			method:      http.MethodGet,
 			handlerFunc: s.requireGameAuth(s.serveGame),
 		},
+		// Get players.
+		{
+			path:        "/api/game/{id}/players",
+			method:      http.MethodGet,
+			handlerFunc: s.requireGameAuth(s.serveGamePlayers),
+		},
 		// Join game.
 		{
 			path:        "/api/game/{id}/join",
@@ -265,6 +271,15 @@ func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request, u *codenames.Use
 	}
 
 	return jsonResp(w, game)
+}
+
+func (s *Srv) serveGamePlayers(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
+	players, err := s.toPlayers(prs)
+	if err != nil {
+		return err
+	}
+
+	return jsonResp(w, players)
 }
 
 func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {

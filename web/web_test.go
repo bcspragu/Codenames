@@ -64,10 +64,28 @@ func TestBasicallyEverything(t *testing.T) {
 		t.Errorf("unexpected pending game IDs (-want +got)\n%s", diff)
 	}
 
+	checkPlayers := func(wantPlayers []*Player) {
+		gotPlayers := env.players(t, gID, 0)
+		if diff := cmp.Diff(wantPlayers, gotPlayers); diff != "" {
+			t.Errorf("expected players in game (-want +got)\n%s", diff)
+		}
+	}
+
+	// At first, we expect nobody in the game.
+	checkPlayers(nil)
+
 	// Have four players join that game.
 	for i := 0; i < 4; i++ {
 		env.joinGame(t, gID, i)
 	}
+
+	// Now, we expect everyone in, but nobody has a role.
+	checkPlayers([]*Player{
+		&Player{PlayerID: human("user_0"), Name: "Test0"},
+		&Player{PlayerID: human("user_1"), Name: "Test1"},
+		&Player{PlayerID: human("user_2"), Name: "Test2"},
+		&Player{PlayerID: human("user_3"), Name: "Test3"},
+	})
 
 	// Have the game creator assign roles.
 	assignRole := func(idx int, role codenames.Role, team codenames.Team) {
@@ -79,8 +97,40 @@ func TestBasicallyEverything(t *testing.T) {
 	assignRole(2, codenames.OperativeRole, codenames.BlueTeam)
 	assignRole(3, codenames.OperativeRole, codenames.RedTeam)
 
+	// Now, we expect everyone has a role.
+	checkPlayers([]*Player{
+		&Player{
+			PlayerID: human("user_0"),
+			Name:     "Test0",
+			Role:     codenames.SpymasterRole,
+			Team:     codenames.BlueTeam,
+		},
+		&Player{
+			PlayerID: human("user_1"),
+			Name:     "Test1",
+			Role:     codenames.SpymasterRole,
+			Team:     codenames.RedTeam,
+		},
+		&Player{
+			PlayerID: human("user_2"),
+			Name:     "Test2",
+			Role:     codenames.OperativeRole,
+			Team:     codenames.BlueTeam,
+		},
+		&Player{
+			PlayerID: human("user_3"),
+			Name:     "Test3",
+			Role:     codenames.OperativeRole,
+			Team:     codenames.RedTeam,
+		},
+	})
+
 	// Have the game creator start the game.
 	env.startGame(t, gID, 1)
+}
+
+func human(uID codenames.UserID) codenames.PlayerID {
+	return uID.AsPlayerID()
 }
 
 // startingBoardCards returns the cards we expect on the test board, since we
@@ -188,6 +238,22 @@ func (env *testEnv) joinGame(t *testing.T, gID codenames.GameID, authIdx int) {
 	if err := handler(w, r); err != nil {
 		t.Fatalf("failed to join game: %v", err)
 	}
+}
+
+func (env *testEnv) players(t *testing.T, gID codenames.GameID, authIdx int) []*Player {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/api/game/"+string(gID)+"/players", nil)
+	r = mux.SetURLVars(r, map[string]string{"id": string(gID)})
+	env.addAuth(r, authIdx)
+
+	handler := env.srv.requireGameAuth(env.srv.serveGamePlayers)
+	if err := handler(w, r); err != nil {
+		t.Fatalf("failed to get players: %v", err)
+	}
+
+	var resp []*Player
+	fromBody(t, w, &resp)
+	return resp
 }
 
 func (env *testEnv) assignRole(t *testing.T, gID codenames.GameID, authIdx int, userID string, role codenames.Role, team codenames.Team) {

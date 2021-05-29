@@ -35,6 +35,11 @@ func (p PlayerID) IsUser(uID UserID) bool {
 }
 
 type UserID string
+
+func (u UserID) AsPlayerID() PlayerID {
+	return PlayerID{PlayerType: PlayerTypeHuman, ID: string(u)}
+}
+
 type GameID string
 
 type GameStatus string
