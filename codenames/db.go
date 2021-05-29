@@ -77,11 +77,35 @@ type User struct {
 	Name string `json:"name"`
 }
 
+func (u *User) Clone() *User {
+	if u == nil {
+		return nil
+	}
+
+	return &User{
+		ID:   u.ID,
+		Name: u.Name,
+	}
+}
+
 type Game struct {
 	ID        GameID     `json:"id"`
 	CreatedBy UserID     `json:"created_by"`
 	Status    GameStatus `json:"status"`
 	State     *GameState `json:"state"`
+}
+
+func (g *Game) Clone() *Game {
+	if g == nil {
+		return nil
+	}
+
+	return &Game{
+		ID:        g.ID,
+		CreatedBy: g.CreatedBy,
+		Status:    g.Status,
+		State:     g.State.Clone(),
+	}
 }
 
 type GameState struct {
@@ -92,6 +116,20 @@ type GameState struct {
 	StartingTeam   Team   `json:"starting_team"`
 }
 
+func (gs *GameState) Clone() *GameState {
+	if gs == nil {
+		return nil
+	}
+
+	return &GameState{
+		ActiveTeam:     gs.ActiveTeam,
+		ActiveRole:     gs.ActiveRole,
+		Board:          gs.Board.Clone(),
+		NumGuessesLeft: gs.NumGuessesLeft,
+		StartingTeam:   gs.StartingTeam,
+	}
+}
+
 type PlayerRole struct {
 	PlayerID     PlayerID `json:"player_id"`
 	Team         Team     `json:"team"`
@@ -99,9 +137,26 @@ type PlayerRole struct {
 	RoleAssigned bool     `json:"role_assigned"`
 }
 
+func (pr *PlayerRole) Clone() *PlayerRole {
+	if pr == nil {
+		return nil
+	}
+
+	return &PlayerRole{
+		PlayerID:     pr.PlayerID,
+		Team:         pr.Team,
+		Role:         pr.Role,
+		RoleAssigned: pr.RoleAssigned,
+	}
+}
+
 func AllRolesFilled(prs []*PlayerRole) error {
 	roleCount := make(map[Team]map[Role]int)
 	for _, pr := range prs {
+		if !pr.RoleAssigned {
+			continue
+		}
+
 		rc, ok := roleCount[pr.Team]
 		if !ok {
 			rc = make(map[Role]int)

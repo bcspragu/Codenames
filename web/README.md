@@ -134,10 +134,15 @@ generally RESTful way. The endpoints are as follows:
 
 * `POST /api/game/{id}/start` - Kicks off the game with the given ID, can only
   be called by the person who created the game, once all roles have been
-  filled.
+  filled. If not all roles have been filled, you can optionally specify
+  `"random_assignment": true` in order to have the game assign any unassigned
+  players to roles.
   ```
   == Example Request ==
   POST /api/game/TheGameID123/start
+  {"random_assignment": false}
+
+  == Example Response ==
   {"success": true}
   ```
   This will send down a WebSocket message to all connected players indicating

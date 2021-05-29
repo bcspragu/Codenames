@@ -15,8 +15,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var ()
-
 var (
 	// Game statements
 	createGameStmt      = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`

@@ -34,7 +34,6 @@ var baseAgents = []codenames.Agent{
 }
 
 func New(starter codenames.Team, r *rand.Rand) *codenames.Board {
-	used := make(map[string]struct{})
 	agents := make([]codenames.Agent, len(baseAgents))
 	copy(agents, baseAgents)
 
@@ -46,13 +45,14 @@ func New(starter codenames.Team, r *rand.Rand) *codenames.Board {
 	}
 
 	// Pick words at random from our list.
-	for len(used) < codenames.Size {
-		used[codenames.Words[r.Intn(len(codenames.Words))]] = struct{}{}
-	}
-
+	used := make(map[string]struct{})
 	var selected []string
-	for word := range used {
-		selected = append(selected, word)
+	for len(used) < codenames.Size {
+		word := codenames.Words[r.Intn(len(codenames.Words))]
+		if _, ok := used[word]; !ok {
+			used[word] = struct{}{}
+			selected = append(selected, word)
+		}
 	}
 
 	var cards []codenames.Card

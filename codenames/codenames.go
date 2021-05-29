@@ -34,6 +34,17 @@ type Board struct {
 	Cards []Card `json:"cards"`
 }
 
+func (b *Board) Clone() *Board {
+	if b == nil {
+		return nil
+	}
+
+	cards := make([]Card, len(b.Cards))
+	copy(cards, b.Cards)
+
+	return &Board{Cards: cards}
+}
+
 // Clue is a word and a count from the Spymaster.
 type Clue struct {
 	Word  string `json:"word"`

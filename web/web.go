@@ -299,7 +299,7 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return httperr.BadRequest("failed to decode join game request: %w", err)
+		return httperr.BadRequest("failed to decode assign role request: %w", err)
 	}
 
 	u, err := s.db.User(codenames.UserID(req.UserID))
@@ -325,6 +325,10 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 
 	roleCount := make(map[codenames.Role]map[codenames.Team]int)
 	for _, pr := range prs {
+		if !pr.RoleAssigned {
+			continue
+		}
+
 		rc, ok := roleCount[pr.Role]
 		if !ok {
 			rc = make(map[codenames.Team]int)
@@ -378,6 +382,41 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 }
 
 func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
+	var req struct {
+		RandomAssignment bool `json:"random_assignment"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return httperr.BadRequest("failed to decode start game request: %w", err)
+	}
+
+	if req.RandomAssignment {
+		modified, err := s.finishAssigningRoles(game, prs)
+		if err != nil {
+			return err
+		}
+		if modified {
+			// Load the player roles again since we modified them during random
+			// assignment.
+			newPRS, err := s.db.PlayersInGame(game.ID)
+			if err != nil {
+				return httperr.
+					Internal("failed to load players in game %q: %w", game.ID, err).
+					WithMessage("failed to load players in game")
+			}
+			prs = newPRS
+		}
+	}
+
+	// Now, check that we don't have any unassigned folks in the lobby.
+	for _, pr := range prs {
+		if !pr.RoleAssigned {
+			return httperr.
+				BadRequest("can't start game because player %+v hasn't been given a role", pr.PlayerID).
+				WithMessage("at least one player hasn't been assigned a role")
+		}
+	}
+
 	if err := codenames.AllRolesFilled(prs); err != nil {
 		return httperr.
 			BadRequest("user %q tried to start game %q, but not all roles are filled: %w", u.ID, game.ID, err).
@@ -414,6 +453,92 @@ func (s *Srv) serveStartGame(w http.ResponseWriter, r *http.Request, u *codename
 	return jsonResp(w, struct {
 		Success bool `json:"success"`
 	}{true})
+}
+
+func (s *Srv) finishAssigningRoles(game *codenames.Game, prs []*codenames.PlayerRole) (bool, error) {
+	if len(prs) < 4 {
+		return false, httperr.
+			BadRequest("only have %d players, need four to start a game", len(prs)).
+			WithMessage("you need at least four players to start")
+	}
+
+	// Start by marking both spymaster positions available.
+	availableSpymasterPos := map[codenames.Team]bool{
+		codenames.BlueTeam: true,
+		codenames.RedTeam:  true,
+	}
+
+	// Now, find all the users without roles, and mark taking roles as such.
+	var unassigned []*codenames.PlayerRole
+	for _, pr := range prs {
+		if !pr.RoleAssigned {
+			unassigned = append(unassigned, pr)
+			continue
+		}
+
+		// Only spymasters get marked as 'taken', since we can have any number of
+		// operatives.
+		if pr.Role == codenames.SpymasterRole {
+			availableSpymasterPos[pr.Team] = false
+		}
+	}
+
+	// Now, shuffle the unassigned users.
+	s.r.Shuffle(len(unassigned), func(i, j int) {
+		unassigned[i], unassigned[j] = unassigned[j], unassigned[i]
+	})
+
+	attemptAssignSpymaster := func(pr *codenames.PlayerRole) (bool, error) {
+		for _, team := range []codenames.Team{codenames.RedTeam, codenames.BlueTeam} {
+			if !availableSpymasterPos[team] {
+				continue
+			}
+
+			// Assign this player to the spymaster role, since it's available.
+			if err := s.db.AssignRole(game.ID, &codenames.PlayerRole{
+				PlayerID: pr.PlayerID,
+				Team:     team,
+				Role:     codenames.SpymasterRole,
+			}); err != nil {
+				return false, httperr.
+					Internal("failed to assign %+v to %s spymaster: %w", pr.PlayerID, team, err).
+					WithMessage("failed to randomly assign players")
+			}
+			availableSpymasterPos[team] = false
+			return true, nil
+		}
+		return false, nil
+	}
+
+	for i, pr := range unassigned {
+		// First, try to assign to spymaster roles.
+		assigned, err := attemptAssignSpymaster(pr)
+		if err != nil {
+			return false, err
+		}
+		if assigned {
+			continue
+		}
+
+		// If there are no spymaster positions open, pick an operative team and
+		// assign them.
+		team := codenames.RedTeam
+		if i%2 == 1 {
+			team = codenames.BlueTeam
+		}
+
+		if err := s.db.AssignRole(game.ID, &codenames.PlayerRole{
+			PlayerID: pr.PlayerID,
+			Team:     team,
+			Role:     codenames.OperativeRole,
+		}); err != nil {
+			return false, httperr.
+				Internal("failed to assign %+v to %s operative: %w", pr.PlayerID, team, err).
+				WithMessage("failed to randomly assign players")
+		}
+	}
+
+	return len(unassigned) > 0, nil
 }
 
 func (s *Srv) toPlayers(prs []*codenames.PlayerRole) ([]*Player, error) {
