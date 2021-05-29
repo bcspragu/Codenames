@@ -40,13 +40,18 @@ WHERE id = ?`
 	createPlayerStmt  = `INSERT INTO Players (id, user_id, ai_id) VALUES (?, ?, ?)`
 
 	// Game player (e.g. Game <-> Player join table) statements
-	joinGameStmt   = `INSERT INTO GamePlayers (game_id, player_id, role_assigned) VALUES (?, ?, 0)`
+	joinGameStmt = `
+INSERT INTO GamePlayers
+(game_id, player_id, role_assigned) VALUES
+(?, ?, 0)`
+
 	assignRoleStmt = `
 UPDATE GamePlayers
 SET role_assigned = 1,
 		role = ?,
 		team = ?
-WHERE player_id = ?`
+WHERE game_id = ?
+	AND player_id = ?`
 	getGamePlayers = `
 SELECT Players.user_id, Players.ai_id, GamePlayers.role, GamePlayers.team, GamePlayers.role_assigned
 FROM GamePlayers
@@ -400,7 +405,7 @@ func (s *DB) AssignRole(gID codenames.GameID, req *codenames.PlayerRole) error {
 	// If we're here, we've got a player ID and we can add them to the game.
 	resChan := make(chan error)
 	s.dbChan <- func(sdb *sql.DB) {
-		res, err := sdb.Exec(assignRoleStmt, gID, req.Role, req.Team, pID)
+		res, err := sdb.Exec(assignRoleStmt, req.Role, req.Team, gID, pID)
 		if err != nil {
 			resChan <- fmt.Errorf("failed to assign role: %w", err)
 			return

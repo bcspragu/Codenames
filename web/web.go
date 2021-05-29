@@ -199,8 +199,9 @@ func (s *Srv) serveCreateUser(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	return jsonResp(w, struct {
-		Success bool `json:"success"`
-	}{true})
+		UserID  string `json:"user_id"`
+		Success bool   `json:"success"`
+	}{string(id), true})
 }
 
 func (s *Srv) serveUpdateUser(w http.ResponseWriter, r *http.Request) error {

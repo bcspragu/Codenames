@@ -24,24 +24,8 @@ func main() {
 		serverScheme = flag.String("server_scheme", "http", "The scheme of the server to connect to to play the game.")
 		serverAddr   = flag.String("server_addr", "localhost:8080", "The address of the server to connect to to play the game.")
 		gameToJoin   = flag.String("game_to_join", "", "The ID of the game to join, will create one if its blank")
-		teamToJoin   = flag.String("team_to_join", "", "The name of the team to join, 'BLUE' or 'RED'")
-		roleToJoin   = flag.String("role_to_join", "", "The name of the role to join, 'SPYMASTER' or 'OPERATIVE'")
 	)
 	flag.Parse()
-
-	requiredFlags := []struct {
-		name string
-		val  *string
-	}{
-		{"team_to_join", teamToJoin},
-		{"role_to_join", roleToJoin},
-	}
-
-	for _, rf := range requiredFlags {
-		if *rf.val == "" {
-			log.Fatalf("--%s must be specified", rf.name)
-		}
-	}
 
 	if flag.NArg() < 1 {
 		log.Fatal("need to specify a username")
@@ -59,7 +43,8 @@ func main() {
 		client: &http.Client{Jar: jar},
 	}
 
-	if err := client.createUser(name); err != nil {
+	userID, err := client.createUser(name)
+	if err != nil {
 		log.Fatalf("failed to create user: %v", err)
 	}
 
@@ -75,32 +60,33 @@ func main() {
 		gameID = *gameToJoin
 	}
 
-	if err := client.joinGame(gameID, *teamToJoin, *roleToJoin); err != nil {
+	if err := client.joinGame(gameID); err != nil {
 		log.Fatalf("failed to join game: %v", err)
 	}
 
-	team, role := codenames.Team(*teamToJoin), codenames.Role(*roleToJoin)
-
 	// Now that we've joined the game, connect via WebSockets.
 	reader := bufio.NewReader(os.Stdin)
+
+	var (
+		team codenames.Team
+		role codenames.Role
+	)
 
 	// defer termui.Close()
 	err = client.listenForUpdates(gameID, wsHooks{
 		onConnect: func() {
 			if *gameToJoin == "" {
 				// Means we created the game, so we need to start it.
-				for {
-					fmt.Print("Press ENTER to start game")
-					_, _ = reader.ReadString('\n')
-					if err := client.startGame(gameID); err != nil {
-						log.Printf("failed to start game: %v", err)
-						continue
-					}
-					break
-				}
+				lobbyShell(reader, client, gameID)
 			}
 		},
 		onStart: func(gs *web.GameStart) {
+			for _, p := range gs.Players {
+				if p.PlayerID.ID == userID {
+					team = p.Team
+					role = p.Role
+				}
+			}
 			// if err := termui.Init(); err != nil {
 			// 	log.Fatalf("failed to initialize termui: %v", err)
 			// }
@@ -228,21 +214,23 @@ type client struct {
 	client *http.Client
 }
 
-func (c *client) createUser(name string) error {
+func (c *client) createUser(name string) (string, error) {
 	body := struct {
 		Name string `json:"name"`
 	}{name}
 
 	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/user", toBody(body))
 	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
+		return "", fmt.Errorf("failed to form request: %w", err)
 	}
 
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
+	var resp struct {
+		UserID string `json:"user_id"`
 	}
-
-	return nil
+	if err := c.do(req, &resp); err != nil {
+		return "", fmt.Errorf("failed to create user: %w", err)
+	}
+	return resp.UserID, nil
 }
 
 func (c *client) createGame() (string, error) {
@@ -260,13 +248,21 @@ func (c *client) createGame() (string, error) {
 	return resp.ID, nil
 }
 
-func (c *client) joinGame(gID, team, role string) error {
-	body := struct {
-		Team string `json:"team"`
-		Role string `json:"role"`
-	}{team, role}
+func (c *client) players(gID string) ([]*web.Player, error) {
+	req, err := http.NewRequest(http.MethodGet, c.scheme+"://"+c.addr+"/api/game/"+gID+"/players", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to form request: %w", err)
+	}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/join", toBody(body))
+	var resp []*web.Player
+	if err := c.do(req, &resp); err != nil {
+		return nil, fmt.Errorf("failed to load players: %w", err)
+	}
+	return resp, nil
+}
+
+func (c *client) joinGame(gID string) error {
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/join", nil)
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -278,8 +274,31 @@ func (c *client) joinGame(gID, team, role string) error {
 	return nil
 }
 
+func (c *client) assignRole(gID, uID, team, role string) error {
+	body := struct {
+		UserID string `json:"user_id"`
+		Team   string `json:"team"`
+		Role   string `json:"role"`
+	}{uID, team, role}
+
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/assignRole", toBody(body))
+	if err != nil {
+		return fmt.Errorf("failed to form request: %w", err)
+	}
+
+	if err := c.do(req, nil); err != nil {
+		return fmt.Errorf("failed to assign role: %w", err)
+	}
+
+	return nil
+}
+
 func (c *client) startGame(gID string) error {
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/start", nil)
+	body := struct {
+		RandomAssignment bool `json:"random_assignment"`
+	}{true}
+
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/start", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -417,4 +436,70 @@ func printBoard(b *codenames.Board) {
 	}
 
 	table.Render()
+}
+
+func lobbyShell(reader *bufio.Reader, c *client, gameID string) {
+	fmt.Println("Welcome to the pre-game lobby! Enter 'help' for help")
+	for {
+		txt, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Failed to get text: %v", err)
+			continue
+		}
+		txt = strings.TrimSpace(txt)
+
+		switch {
+		case txt == "help":
+			printHelp()
+			continue
+		case txt == "players":
+			players, err := c.players(gameID)
+			if err != nil {
+				log.Printf("failed to list players: %v", err)
+				continue
+			}
+			printPlayers(players)
+			continue
+		case txt == "start":
+			if err := c.startGame(gameID); err != nil {
+				log.Printf("failed to start game: %v", err)
+				continue
+			}
+			return
+		case strings.HasPrefix(txt, "assign"):
+			ps := strings.Split(txt, " ")
+			if len(ps) != 4 {
+				log.Println("invalid args, expected 4")
+				continue
+			}
+			if err := c.assignRole(gameID, ps[1], ps[2], ps[3]); err != nil {
+				log.Printf("failed to assign role: %v", err)
+			}
+			continue
+		}
+		break
+	}
+}
+
+func printHelp() {
+	help := []string{
+		"help\t\t\t\tShow this help text",
+		"start\t\t\t\tTry to start the game",
+		"players\t\t\t\tList the players in the lobby",
+		"assign PLAYER TEAM ROLE\t\tAssign a player (by ID) to a given team/role",
+	}
+
+	fmt.Println()
+	fmt.Println(strings.Join(help, "\n"))
+	fmt.Println()
+}
+
+func printPlayers(ps []*web.Player) {
+	for _, p := range ps {
+		fmt.Printf("[%s] %s", p.PlayerID.ID, p.Name)
+		if p.Role != codenames.NoRole && p.Team != codenames.NoTeam {
+			fmt.Printf(" - %s %s", p.Team, p.Role)
+		}
+		fmt.Println()
+	}
 }
