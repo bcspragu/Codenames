@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"encoding/json"
@@ -15,10 +15,10 @@ type wsClient struct {
 	conn  *websocket.Conn
 	msgs  chan []byte
 	done  chan struct{}
-	hooks wsHooks
+	hooks WSHooks
 }
 
-func (c *client) listenForUpdates(gID string, hooks wsHooks) error {
+func (c *Client) ListenForUpdates(gID string, hooks WSHooks) error {
 	scheme := "ws"
 	if c.scheme == "https" {
 		scheme = "wss"
@@ -29,15 +29,15 @@ func (c *client) listenForUpdates(gID string, hooks wsHooks) error {
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		Jar:              c.client.Jar,
+		Jar:              c.http.Jar,
 	}
 	conn, _, err := dialer.Dial(addr, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
 
-	if hooks.onConnect != nil {
-		go hooks.onConnect()
+	if hooks.OnConnect != nil {
+		go hooks.OnConnect()
 	}
 
 	wsc := &wsClient{
@@ -112,10 +112,10 @@ func (ws *wsClient) handleGameStart(dat []byte) {
 
 	fmt.Println(string(dat))
 	fmt.Printf("%+v\n", gs)
-	if ws.hooks.onStart == nil {
+	if ws.hooks.OnStart == nil {
 		return
 	}
-	ws.hooks.onStart(&gs)
+	ws.hooks.OnStart(&gs)
 }
 
 func (ws *wsClient) handleClueGiven(dat []byte) {
@@ -125,10 +125,10 @@ func (ws *wsClient) handleClueGiven(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onClueGiven == nil {
+	if ws.hooks.OnClueGiven == nil {
 		return
 	}
-	ws.hooks.onClueGiven(&cg)
+	ws.hooks.OnClueGiven(&cg)
 }
 
 func (ws *wsClient) handlePlayerVote(dat []byte) {
@@ -138,10 +138,10 @@ func (ws *wsClient) handlePlayerVote(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onPlayerVote == nil {
+	if ws.hooks.OnPlayerVote == nil {
 		return
 	}
-	ws.hooks.onPlayerVote(&pv)
+	ws.hooks.OnPlayerVote(&pv)
 }
 
 func (ws *wsClient) handleGuessGiven(dat []byte) {
@@ -151,10 +151,10 @@ func (ws *wsClient) handleGuessGiven(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onGuessGiven == nil {
+	if ws.hooks.OnGuessGiven == nil {
 		return
 	}
-	ws.hooks.onGuessGiven(&gg)
+	ws.hooks.OnGuessGiven(&gg)
 }
 
 func (ws *wsClient) handleGameEnd(dat []byte) {
@@ -164,17 +164,17 @@ func (ws *wsClient) handleGameEnd(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onEnd == nil {
+	if ws.hooks.OnEnd == nil {
 		return
 	}
-	ws.hooks.onEnd(&ge)
+	ws.hooks.OnEnd(&ge)
 }
 
-type wsHooks struct {
-	onConnect    func()
-	onStart      func(*web.GameStart)
-	onClueGiven  func(*web.ClueGiven)
-	onPlayerVote func(*web.PlayerVote)
-	onGuessGiven func(*web.GuessGiven)
-	onEnd        func(*web.GameEnd)
+type WSHooks struct {
+	OnConnect    func()
+	OnStart      func(*web.GameStart)
+	OnClueGiven  func(*web.ClueGiven)
+	OnPlayerVote func(*web.PlayerVote)
+	OnGuessGiven func(*web.GuessGiven)
+	OnEnd        func(*web.GameEnd)
 }

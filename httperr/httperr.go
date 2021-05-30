@@ -38,6 +38,10 @@ func BadRequest(format string, args ...interface{}) *Error {
 	return newError(http.StatusBadRequest, format, args...)
 }
 
+func MethodNotAllowed(format string, args ...interface{}) *Error {
+	return newError(http.StatusMethodNotAllowed, format, args...)
+}
+
 func Internal(format string, args ...interface{}) *Error {
 	return newError(http.StatusInternalServerError, format, args...)
 }

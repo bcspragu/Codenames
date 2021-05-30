@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bytes"
@@ -13,26 +13,26 @@ import (
 	"github.com/bcspragu/Codenames/web"
 )
 
-type client struct {
+type Client struct {
 	scheme string
 	addr   string
-	client *http.Client
+	http   *http.Client
 }
 
-func newClient(scheme, addr string) (*client, error) {
+func New(scheme, addr string) (*Client, error) {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cookie jar: %v", err)
 	}
 
-	return &client{
+	return &Client{
 		scheme: scheme,
 		addr:   addr,
-		client: &http.Client{Jar: jar},
+		http:   &http.Client{Jar: jar},
 	}, nil
 }
 
-func (c *client) createUser(name string) (string, error) {
+func (c *Client) CreateUser(name string) (string, error) {
 	body := struct {
 		Name string `json:"name"`
 	}{name}
@@ -51,7 +51,7 @@ func (c *client) createUser(name string) (string, error) {
 	return resp.UserID, nil
 }
 
-func (c *client) createGame() (string, error) {
+func (c *Client) CreateGame() (string, error) {
 	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to form request: %w", err)
@@ -66,7 +66,7 @@ func (c *client) createGame() (string, error) {
 	return resp.ID, nil
 }
 
-func (c *client) players(gID string) ([]*web.Player, error) {
+func (c *Client) Players(gID string) ([]*web.Player, error) {
 	req, err := http.NewRequest(http.MethodGet, c.scheme+"://"+c.addr+"/api/game/"+gID+"/players", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to form request: %w", err)
@@ -79,7 +79,7 @@ func (c *client) players(gID string) ([]*web.Player, error) {
 	return resp, nil
 }
 
-func (c *client) joinGame(gID string) error {
+func (c *Client) JoinGame(gID string) error {
 	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/join", nil)
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
@@ -92,7 +92,7 @@ func (c *client) joinGame(gID string) error {
 	return nil
 }
 
-func (c *client) assignRole(gID, uID, team, role string) error {
+func (c *Client) AssignRole(gID, uID, team, role string) error {
 	body := struct {
 		UserID string `json:"user_id"`
 		Team   string `json:"team"`
@@ -111,7 +111,7 @@ func (c *client) assignRole(gID, uID, team, role string) error {
 	return nil
 }
 
-func (c *client) startGame(gID string) error {
+func (c *Client) StartGame(gID string) error {
 	body := struct {
 		RandomAssignment bool `json:"random_assignment"`
 	}{true}
@@ -128,7 +128,7 @@ func (c *client) startGame(gID string) error {
 	return nil
 }
 
-func (c *client) giveClue(gID string, clue *codenames.Clue) error {
+func (c *Client) GiveClue(gID string, clue *codenames.Clue) error {
 	body := struct {
 		Word  string `json:"word"`
 		Count int    `json:"count"`
@@ -146,7 +146,7 @@ func (c *client) giveClue(gID string, clue *codenames.Clue) error {
 	return nil
 }
 
-func (c *client) giveGuess(gID, guess string, confirmed bool) error {
+func (c *Client) GiveGuess(gID, guess string, confirmed bool) error {
 	body := struct {
 		Guess     string `json:"guess"`
 		Confirmed bool   `json:"confirmed"`
@@ -164,8 +164,8 @@ func (c *client) giveGuess(gID, guess string, confirmed bool) error {
 	return nil
 }
 
-func (c *client) do(req *http.Request, resp interface{}) error {
-	httpResp, err := c.client.Do(req)
+func (c *Client) do(req *http.Request, resp interface{}) error {
+	httpResp, err := c.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
@@ -225,4 +225,8 @@ type errReader struct {
 
 func (e *errReader) Read(_ []byte) (int, error) {
 	return 0, e.err
+}
+
+func main() {
+	fmt.Println("vim-go")
 }

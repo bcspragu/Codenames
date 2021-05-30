@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bcspragu/Codenames/client"
 	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/web"
 	"github.com/olekukonko/tablewriter"
@@ -26,19 +27,19 @@ func main() {
 	name := prompt(reader, "Enter a username: ")
 	gameToJoin := prompt(reader, "Enter a game ID to join, or blank to create a game: ", allowEmpty())
 
-	client, err := newClient(*serverScheme, *serverAddr)
+	c, err := client.New(*serverScheme, *serverAddr)
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
 
-	userID, err := client.createUser(name)
+	userID, err := c.CreateUser(name)
 	if err != nil {
 		log.Fatalf("failed to create user: %v", err)
 	}
 
 	var gameID string
 	if gameToJoin == "" {
-		gID, err := client.createGame()
+		gID, err := c.CreateGame()
 		if err != nil {
 			log.Fatalf("failed to create game: %v", err)
 		}
@@ -48,7 +49,7 @@ func main() {
 		gameID = gameToJoin
 	}
 
-	if err := client.joinGame(gameID); err != nil {
+	if err := c.JoinGame(gameID); err != nil {
 		log.Fatalf("failed to join game: %v", err)
 	}
 
@@ -58,14 +59,14 @@ func main() {
 	)
 
 	// defer termui.Close()
-	err = client.listenForUpdates(gameID, wsHooks{
-		onConnect: func() {
+	err = c.ListenForUpdates(gameID, client.WSHooks{
+		OnConnect: func() {
 			if gameToJoin == "" {
 				// Means we created the game, so we need to start it.
-				lobbyShell(reader, client, gameID)
+				lobbyShell(reader, c, gameID)
 			}
 		},
-		onStart: func(gs *web.GameStart) {
+		OnStart: func(gs *web.GameStart) {
 			for _, p := range gs.Players {
 				if p.PlayerID.ID == userID {
 					team = p.Team
@@ -79,12 +80,12 @@ func main() {
 
 			// If the game started, and we're the starter spymaster, give a clue.
 			if role == codenames.SpymasterRole && gs.Game.State.ActiveTeam == team {
-				if err := giveAClue(client, gameID, reader); err != nil {
+				if err := giveAClue(c, gameID, reader); err != nil {
 					log.Fatalf("failed to give clue: %v", err)
 				}
 			}
 		},
-		onClueGiven: func(cg *web.ClueGiven) {
+		OnClueGiven: func(cg *web.ClueGiven) {
 			fmt.Printf("Clue Given: %q %d\n", cg.Clue.Word, cg.Clue.Count)
 
 			if role != codenames.OperativeRole || team != cg.Team {
@@ -93,32 +94,32 @@ func main() {
 
 			// If we're an operative, and the clue was given for our team, let's
 			// guess.
-			if err := giveAGuess(client, gameID, cg.Game.State.Board, reader); err != nil {
+			if err := giveAGuess(c, gameID, cg.Game.State.Board, reader); err != nil {
 				log.Fatalf("failed to give clue: %v", err)
 			}
 		},
-		onPlayerVote: func(pv *web.PlayerVote) {
+		OnPlayerVote: func(pv *web.PlayerVote) {
 			// TODO: Show the vote
 		},
-		onGuessGiven: func(gg *web.GuessGiven) {
+		OnGuessGiven: func(gg *web.GuessGiven) {
 			fmt.Printf("Guess was %q, card was %+v\n", gg.Guess, gg.RevealedCard)
 
 			// We're an operative on the active team and we got the last one correct
 			// and have guesses left.
 			if gg.CanKeepGuessing && role == codenames.OperativeRole && team == gg.Team {
-				if err := giveAGuess(client, gameID, gg.Game.State.Board, reader); err != nil {
+				if err := giveAGuess(c, gameID, gg.Game.State.Board, reader); err != nil {
 					log.Fatalf("failed to give clue: %v", err)
 				}
 			}
 
 			// We're the opposing spymaster and the other team is done guessing.
 			if !gg.CanKeepGuessing && role == codenames.SpymasterRole && team != gg.Team {
-				if err := giveAClue(client, gameID, reader); err != nil {
+				if err := giveAClue(c, gameID, reader); err != nil {
 					log.Fatalf("failed to give clue: %v", err)
 				}
 			}
 		},
-		onEnd: func(ge *web.GameEnd) {
+		OnEnd: func(ge *web.GameEnd) {
 			fmt.Printf("Game over, %q won!", ge.WinningTeam)
 		},
 	})
@@ -127,9 +128,9 @@ func main() {
 	}
 }
 
-func giveAClue(client *client, gameID string, reader *bufio.Reader) error {
+func giveAClue(c *client.Client, gameID string, reader *bufio.Reader) error {
 	clue := getAClue(reader)
-	if err := client.giveClue(gameID, clue); err != nil {
+	if err := c.GiveClue(gameID, clue); err != nil {
 		return fmt.Errorf("failed to send clue: %w", err)
 	}
 	return nil
@@ -151,9 +152,9 @@ func getAClue(reader *bufio.Reader) *codenames.Clue {
 	}
 }
 
-func giveAGuess(client *client, gameID string, board *codenames.Board, reader *bufio.Reader) error {
+func giveAGuess(c *client.Client, gameID string, board *codenames.Board, reader *bufio.Reader) error {
 	guess, confirmed := getAGuess(reader, board)
-	if err := client.giveGuess(gameID, guess, confirmed); err != nil {
+	if err := c.GiveGuess(gameID, guess, confirmed); err != nil {
 		return fmt.Errorf("failed to send guess: %w", err)
 	}
 	return nil
@@ -222,7 +223,7 @@ func printBoard(b *codenames.Board) {
 	table.Render()
 }
 
-func lobbyShell(reader *bufio.Reader, c *client, gameID string) {
+func lobbyShell(reader *bufio.Reader, c *client.Client, gameID string) {
 	fmt.Println("Welcome to the pre-game lobby! Enter 'help' for help")
 	for {
 		txt, err := reader.ReadString('\n')
@@ -237,7 +238,7 @@ func lobbyShell(reader *bufio.Reader, c *client, gameID string) {
 			printHelp()
 			continue
 		case txt == "players":
-			players, err := c.players(gameID)
+			players, err := c.Players(gameID)
 			if err != nil {
 				log.Printf("failed to list players: %v", err)
 				continue
@@ -245,7 +246,7 @@ func lobbyShell(reader *bufio.Reader, c *client, gameID string) {
 			printPlayers(players)
 			continue
 		case txt == "start":
-			if err := c.startGame(gameID); err != nil {
+			if err := c.StartGame(gameID); err != nil {
 				log.Printf("failed to start game: %v", err)
 				continue
 			}
@@ -256,7 +257,7 @@ func lobbyShell(reader *bufio.Reader, c *client, gameID string) {
 				log.Println("invalid args, expected 4")
 				continue
 			}
-			if err := c.assignRole(gameID, ps[1], ps[2], ps[3]); err != nil {
+			if err := c.AssignRole(gameID, ps[1], ps[2], ps[3]); err != nil {
 				log.Printf("failed to assign role: %v", err)
 			}
 			continue
