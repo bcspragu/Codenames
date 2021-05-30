@@ -2,15 +2,9 @@ package main
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
-	"net/http"
-	"net/http/cookiejar"
 	"os"
 	"strings"
 
@@ -23,24 +17,18 @@ func main() {
 	var (
 		serverScheme = flag.String("server_scheme", "http", "The scheme of the server to connect to to play the game.")
 		serverAddr   = flag.String("server_addr", "localhost:8080", "The address of the server to connect to to play the game.")
-		gameToJoin   = flag.String("game_to_join", "", "The ID of the game to join, will create one if its blank")
 	)
 	flag.Parse()
 
-	if flag.NArg() < 1 {
-		log.Fatal("need to specify a username")
-	}
-	name := flag.Arg(0)
+	// Now that we've joined the game, connect via WebSockets.
+	reader := bufio.NewReader(os.Stdin)
 
-	jar, err := cookiejar.New(nil)
+	name := prompt(reader, "Enter a username: ")
+	gameToJoin := prompt(reader, "Enter a game ID to join, or blank to create a game: ", allowEmpty())
+
+	client, err := newClient(*serverScheme, *serverAddr)
 	if err != nil {
-		log.Fatalf("failed to create cookie jar: %v", err)
-	}
-
-	client := &client{
-		scheme: *serverScheme,
-		addr:   *serverAddr,
-		client: &http.Client{Jar: jar},
+		log.Fatalf("failed to create client: %v", err)
 	}
 
 	userID, err := client.createUser(name)
@@ -49,7 +37,7 @@ func main() {
 	}
 
 	var gameID string
-	if *gameToJoin == "" {
+	if gameToJoin == "" {
 		gID, err := client.createGame()
 		if err != nil {
 			log.Fatalf("failed to create game: %v", err)
@@ -57,15 +45,12 @@ func main() {
 		gameID = gID
 		fmt.Printf("Created game %q\n", gameID)
 	} else {
-		gameID = *gameToJoin
+		gameID = gameToJoin
 	}
 
 	if err := client.joinGame(gameID); err != nil {
 		log.Fatalf("failed to join game: %v", err)
 	}
-
-	// Now that we've joined the game, connect via WebSockets.
-	reader := bufio.NewReader(os.Stdin)
 
 	var (
 		team codenames.Team
@@ -75,7 +60,7 @@ func main() {
 	// defer termui.Close()
 	err = client.listenForUpdates(gameID, wsHooks{
 		onConnect: func() {
-			if *gameToJoin == "" {
+			if gameToJoin == "" {
 				// Means we created the game, so we need to start it.
 				lobbyShell(reader, client, gameID)
 			}
@@ -208,207 +193,6 @@ func guessInCards(guess string, cards []codenames.Card) bool {
 	return false
 }
 
-type client struct {
-	scheme string
-	addr   string
-	client *http.Client
-}
-
-func (c *client) createUser(name string) (string, error) {
-	body := struct {
-		Name string `json:"name"`
-	}{name}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/user", toBody(body))
-	if err != nil {
-		return "", fmt.Errorf("failed to form request: %w", err)
-	}
-
-	var resp struct {
-		UserID string `json:"user_id"`
-	}
-	if err := c.do(req, &resp); err != nil {
-		return "", fmt.Errorf("failed to create user: %w", err)
-	}
-	return resp.UserID, nil
-}
-
-func (c *client) createGame() (string, error) {
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game", nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to form request: %w", err)
-	}
-
-	var resp struct {
-		ID string `json:"id"`
-	}
-	if err := c.do(req, &resp); err != nil {
-		return "", fmt.Errorf("failed to create game: %w", err)
-	}
-	return resp.ID, nil
-}
-
-func (c *client) players(gID string) ([]*web.Player, error) {
-	req, err := http.NewRequest(http.MethodGet, c.scheme+"://"+c.addr+"/api/game/"+gID+"/players", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to form request: %w", err)
-	}
-
-	var resp []*web.Player
-	if err := c.do(req, &resp); err != nil {
-		return nil, fmt.Errorf("failed to load players: %w", err)
-	}
-	return resp, nil
-}
-
-func (c *client) joinGame(gID string) error {
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/join", nil)
-	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
-	}
-
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to join game: %w", err)
-	}
-
-	return nil
-}
-
-func (c *client) assignRole(gID, uID, team, role string) error {
-	body := struct {
-		UserID string `json:"user_id"`
-		Team   string `json:"team"`
-		Role   string `json:"role"`
-	}{uID, team, role}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/assignRole", toBody(body))
-	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
-	}
-
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to assign role: %w", err)
-	}
-
-	return nil
-}
-
-func (c *client) startGame(gID string) error {
-	body := struct {
-		RandomAssignment bool `json:"random_assignment"`
-	}{true}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/start", toBody(body))
-	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
-	}
-
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to start game: %w", err)
-	}
-
-	return nil
-}
-
-func (c *client) giveClue(gID string, clue *codenames.Clue) error {
-	body := struct {
-		Word  string `json:"word"`
-		Count int    `json:"count"`
-	}{clue.Word, clue.Count}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/clue", toBody(body))
-	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
-	}
-
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to give clue to game: %w", err)
-	}
-
-	return nil
-}
-
-func (c *client) giveGuess(gID, guess string, confirmed bool) error {
-	body := struct {
-		Guess     string `json:"guess"`
-		Confirmed bool   `json:"confirmed"`
-	}{guess, confirmed}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/guess", toBody(body))
-	if err != nil {
-		return fmt.Errorf("failed to form request: %w", err)
-	}
-
-	if err := c.do(req, nil); err != nil {
-		return fmt.Errorf("failed to give clue to game: %w", err)
-	}
-
-	return nil
-}
-
-func (c *client) do(req *http.Request, resp interface{}) error {
-	httpResp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to make request: %w", err)
-	}
-	defer httpResp.Body.Close()
-	if httpResp.StatusCode != http.StatusOK {
-		return handleError(httpResp)
-	}
-
-	if resp != nil {
-		if err := json.NewDecoder(httpResp.Body).Decode(resp); err != nil {
-			return fmt.Errorf("failed to decode response body: %w", err)
-		}
-	}
-
-	return nil
-}
-
-type httpError struct {
-	statusCode int
-	body       string
-	err        error
-}
-
-func (h *httpError) Error() string {
-	if h.err != nil {
-		return fmt.Sprintf("[%d] failed to handle error: %v", h.statusCode, h.err)
-	}
-	return fmt.Sprintf("[%d] error from server: %s", h.statusCode, h.body)
-}
-
-func handleError(resp *http.Response) error {
-	dat, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return &httpError{
-			statusCode: resp.StatusCode,
-			err:        fmt.Errorf("failed to read error response body: %w", err),
-		}
-	}
-
-	return &httpError{
-		statusCode: resp.StatusCode,
-		body:       string(dat),
-	}
-}
-
-func toBody(req interface{}) io.Reader {
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(req); err != nil {
-		return &errReader{err: err}
-	}
-	return &buf
-}
-
-type errReader struct {
-	err error
-}
-
-func (e *errReader) Read(_ []byte) (int, error) {
-	return 0, e.err
-}
-
 func printBoard(b *codenames.Board) {
 	table := tablewriter.NewWriter(os.Stdout)
 
@@ -501,5 +285,39 @@ func printPlayers(ps []*web.Player) {
 			fmt.Printf(" - %s %s", p.Team, p.Role)
 		}
 		fmt.Println()
+	}
+}
+
+type promptOption func(*promptOptions)
+
+type promptOptions struct {
+	allowEmpty bool
+}
+
+func allowEmpty() promptOption {
+	return func(po *promptOptions) {
+		po.allowEmpty = true
+	}
+}
+
+func prompt(reader *bufio.Reader, prmpt string, opts ...promptOption) string {
+	pos := &promptOptions{}
+	for _, opt := range opts {
+		opt(pos)
+	}
+
+	for {
+		fmt.Print(prmpt)
+		txt, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("failed to get text: %v", err)
+			continue
+		}
+		txt = strings.TrimSpace(txt)
+		if txt == "" && !pos.allowEmpty {
+			log.Print("no text entered")
+			continue
+		}
+		return txt
 	}
 }

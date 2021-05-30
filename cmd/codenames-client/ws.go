@@ -13,6 +13,7 @@ import (
 
 type wsClient struct {
 	conn  *websocket.Conn
+	msgs  chan []byte
 	done  chan struct{}
 	hooks wsHooks
 }
@@ -40,10 +41,16 @@ func (c *client) listenForUpdates(gID string, hooks wsHooks) error {
 	}
 
 	wsc := &wsClient{
-		conn:  conn,
-		done:  make(chan struct{}),
+		conn: conn,
+		done: make(chan struct{}),
+		// We buffer it in case messages come in while we're waiting on user input.
+		// We don't want to process messages concurrently, because that seems
+		// likely to cause tricky problems.
+		msgs:  make(chan []byte, 100),
 		hooks: hooks,
 	}
+
+	go wsc.handleMessages()
 
 	return wsc.read()
 }
@@ -55,36 +62,43 @@ func (ws *wsClient) read() error {
 		if err != nil {
 			return fmt.Errorf("ReadMessage: %w", err)
 		}
-		if messageType == websocket.PingMessage {
-			if err := ws.conn.WriteMessage(websocket.PongMessage, []byte{}); err != nil {
-				return fmt.Errorf("failed to send pong: %w", err)
-			}
-		}
 
 		if messageType != websocket.TextMessage {
 			continue
 		}
 
-		var justAction struct {
-			Action string `json:"action"`
-		}
-		if err := json.Unmarshal(message, &justAction); err != nil {
-			return fmt.Errorf("json.Unmarshal: %w", err)
-		}
+		ws.msgs <- message
+	}
+}
 
-		switch justAction.Action {
-		case "GAME_START":
-			ws.handleGameStart(message)
-		case "CLUE_GIVEN":
-			ws.handleClueGiven(message)
-		case "PLAYER_VOTE":
-			ws.handlePlayerVote(message)
-		case "GUESS_GIVEN":
-			ws.handleGuessGiven(message)
-		case "GAME_END":
-			ws.handleGameEnd(message)
-		default:
-			log.Printf("unknown message action %q", justAction.Action)
+func (ws *wsClient) handleMessages() {
+	for {
+		select {
+		case <-ws.done:
+			return
+		case msg := <-ws.msgs:
+			var justAction struct {
+				Action string `json:"action"`
+			}
+			if err := json.Unmarshal(msg, &justAction); err != nil {
+				log.Printf("failed to unmarshal action from server: %v", err)
+				return
+			}
+
+			switch justAction.Action {
+			case "GAME_START":
+				ws.handleGameStart(msg)
+			case "CLUE_GIVEN":
+				ws.handleClueGiven(msg)
+			case "PLAYER_VOTE":
+				ws.handlePlayerVote(msg)
+			case "GUESS_GIVEN":
+				ws.handleGuessGiven(msg)
+			case "GAME_END":
+				ws.handleGameEnd(msg)
+			default:
+				log.Printf("unknown message action %q", justAction.Action)
+			}
 		}
 	}
 }

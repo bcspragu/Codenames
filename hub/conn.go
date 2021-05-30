@@ -45,7 +45,10 @@ func (c *connection) readPump() {
 	}()
 	c.ws.SetReadLimit(maxMessageSize)
 	c.ws.SetReadDeadline(time.Now().Add(pongWait))
-	c.ws.SetPongHandler(func(string) error { c.ws.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.ws.SetPongHandler(func(string) error {
+		c.ws.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		_, _, err := c.ws.ReadMessage()
 		if err != nil {
@@ -80,7 +83,7 @@ func (c *connection) writePump() {
 				return
 			}
 		case <-ticker.C:
-			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
+			if err := c.write(websocket.PingMessage, nil); err != nil {
 				log.Printf("failed to write WebSocket ping: %v", err)
 				return
 			}
