@@ -372,7 +372,7 @@ func (s *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, error
 
 func (s *DB) JoinGame(gID codenames.GameID, pID codenames.PlayerID) error {
 	// First, see if a player entity already exists for this player.
-	entityID, err := s.player(pID)
+	entityID, err := s.Player(pID)
 	if err == sql.ErrNoRows {
 		if entityID, err = s.createPlayer(pID); err != nil {
 			return fmt.Errorf("failed to create player: %w", err)
@@ -397,7 +397,7 @@ func (s *DB) JoinGame(gID codenames.GameID, pID codenames.PlayerID) error {
 
 func (s *DB) AssignRole(gID codenames.GameID, req *codenames.PlayerRole) error {
 	// First, see if a player entity already exists for this player.
-	pID, err := s.player(req.PlayerID)
+	pID, err := s.Player(req.PlayerID)
 	if err != nil {
 		return fmt.Errorf("failed to load player: %w", err)
 	}
@@ -463,7 +463,7 @@ func (s *DB) createPlayer(id codenames.PlayerID) (string, error) {
 	return res.id, nil
 }
 
-func (s *DB) player(id codenames.PlayerID) (string, error) {
+func (s *DB) Player(id codenames.PlayerID) (string, error) {
 	type result struct {
 		id  string
 		err error

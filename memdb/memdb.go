@@ -88,6 +88,20 @@ func (db *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, erro
 	return clonePRs(prs), nil
 }
 
+func (db *DB) Player(pID codenames.PlayerID) (string, error) {
+	if pID.PlayerType != codenames.PlayerTypeHuman {
+		return "", fmt.Errorf("player type %q not supported for memdb, only humans for now", pID.PlayerType)
+	}
+
+	for _, u := range db.users {
+		if pID.IsUser(u.ID) {
+			return "", nil
+		}
+	}
+
+	return "", fmt.Errorf("player %+v not found", pID)
+}
+
 func clonePRs(prs []*codenames.PlayerRole) []*codenames.PlayerRole {
 	out := make([]*codenames.PlayerRole, len(prs))
 	for i, pr := range prs {

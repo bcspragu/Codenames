@@ -229,8 +229,12 @@ func (env *testEnv) pendingGames(t *testing.T) []codenames.GameID {
 }
 
 func (env *testEnv) joinGame(t *testing.T, gID codenames.GameID, authIdx int) {
+	req := struct {
+		PlayerType string `json:"player_type"`
+	}{"HUMAN"}
+
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/api/game/"+string(gID)+"/join", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/game/"+string(gID)+"/join", toBody(t, req))
 	r = mux.SetURLVars(r, map[string]string{"id": string(gID)})
 	env.addAuth(r, authIdx)
 
@@ -257,11 +261,15 @@ func (env *testEnv) players(t *testing.T, gID codenames.GameID, authIdx int) []*
 }
 
 func (env *testEnv) assignRole(t *testing.T, gID codenames.GameID, authIdx int, userID string, role codenames.Role, team codenames.Team) {
+	pID := codenames.PlayerID{
+		PlayerType: codenames.PlayerTypeHuman,
+		ID:         userID,
+	}
 	req := struct {
-		UserID string `json:"user_id"`
-		Team   string `json:"team"`
-		Role   string `json:"role"`
-	}{userID, string(team), string(role)}
+		PlayerID codenames.PlayerID `json:"player_id"`
+		Team     string             `json:"team"`
+		Role     string             `json:"role"`
+	}{pID, string(team), string(role)}
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/game/"+string(gID)+"/assignRole", toBody(t, req))

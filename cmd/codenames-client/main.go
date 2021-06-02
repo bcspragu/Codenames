@@ -37,7 +37,7 @@ func main() {
 		log.Fatalf("failed to create user: %v", err)
 	}
 
-	var gameID string
+	var gameID codenames.GameID
 	if gameToJoin == "" {
 		gID, err := c.CreateGame()
 		if err != nil {
@@ -46,10 +46,10 @@ func main() {
 		gameID = gID
 		fmt.Printf("Created game %q\n", gameID)
 	} else {
-		gameID = gameToJoin
+		gameID = codenames.GameID(gameToJoin)
 	}
 
-	if err := c.JoinGame(gameID); err != nil {
+	if err := c.JoinGame(gameID, codenames.PlayerTypeHuman); err != nil {
 		log.Fatalf("failed to join game: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func main() {
 	}
 }
 
-func giveAClue(c *client.Client, gameID string, reader *bufio.Reader) error {
+func giveAClue(c *client.Client, gameID codenames.GameID, reader *bufio.Reader) error {
 	clue := getAClue(reader)
 	if err := c.GiveClue(gameID, clue); err != nil {
 		return fmt.Errorf("failed to send clue: %w", err)
@@ -152,7 +152,7 @@ func getAClue(reader *bufio.Reader) *codenames.Clue {
 	}
 }
 
-func giveAGuess(c *client.Client, gameID string, board *codenames.Board, reader *bufio.Reader) error {
+func giveAGuess(c *client.Client, gameID codenames.GameID, board *codenames.Board, reader *bufio.Reader) error {
 	guess, confirmed := getAGuess(reader, board)
 	if err := c.GiveGuess(gameID, guess, confirmed); err != nil {
 		return fmt.Errorf("failed to send guess: %w", err)
@@ -223,7 +223,7 @@ func printBoard(b *codenames.Board) {
 	table.Render()
 }
 
-func lobbyShell(reader *bufio.Reader, c *client.Client, gameID string) {
+func lobbyShell(reader *bufio.Reader, c *client.Client, gameID codenames.GameID) {
 	fmt.Println("Welcome to the pre-game lobby! Enter 'help' for help")
 	for {
 		txt, err := reader.ReadString('\n')
@@ -257,7 +257,23 @@ func lobbyShell(reader *bufio.Reader, c *client.Client, gameID string) {
 				log.Println("invalid args, expected 4")
 				continue
 			}
-			if err := c.AssignRole(gameID, ps[1], ps[2], ps[3]); err != nil {
+			pID := codenames.PlayerID{
+				PlayerType: codenames.PlayerTypeHuman,
+				ID:         ps[1],
+			}
+			team, ok := codenames.ToTeam(ps[2])
+			if !ok {
+				log.Printf("invalid team %q", ps[2])
+				continue
+			}
+
+			role, ok := codenames.ToRole(ps[3])
+			if !ok {
+				log.Printf("invalid role %q", ps[3])
+				continue
+			}
+
+			if err := c.AssignRole(gameID, pID, team, role); err != nil {
 				log.Printf("failed to assign role: %v", err)
 			}
 			continue

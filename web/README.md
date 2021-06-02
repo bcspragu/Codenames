@@ -119,12 +119,13 @@ generally RESTful way. The endpoints are as follows:
 
 * `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
   select roles, they just join games. The host will then assign roles to the
-  users in a given game.
+  users in a given game. Clients should set the `player_type` to `HUMAN` to
+  distinguish from AI players.
 
   ```
   == Example Request ==
   POST /api/game/TheGameID123/join
-  {}
+  {"player_type": "HUMAN"}
 
   == Example Response ==
   {"success": true}
@@ -138,7 +139,10 @@ generally RESTful way. The endpoints are as follows:
   == Example Request ==
   POST /api/game/TheGameID123/assignRole
   {
-    "user_id": "abc123",
+    "player_id": {
+      "id": "abc123",
+      "player_type": "HUMAN"
+    },
     "team": "RED",
     "role": "SPYMASTER"
   }

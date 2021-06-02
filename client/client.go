@@ -51,7 +51,7 @@ func (c *Client) CreateUser(name string) (string, error) {
 	return resp.UserID, nil
 }
 
-func (c *Client) CreateGame() (string, error) {
+func (c *Client) CreateGame() (codenames.GameID, error) {
 	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game", nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to form request: %w", err)
@@ -63,11 +63,11 @@ func (c *Client) CreateGame() (string, error) {
 	if err := c.do(req, &resp); err != nil {
 		return "", fmt.Errorf("failed to create game: %w", err)
 	}
-	return resp.ID, nil
+	return codenames.GameID(resp.ID), nil
 }
 
-func (c *Client) Players(gID string) ([]*web.Player, error) {
-	req, err := http.NewRequest(http.MethodGet, c.scheme+"://"+c.addr+"/api/game/"+gID+"/players", nil)
+func (c *Client) Players(gID codenames.GameID) ([]*web.Player, error) {
+	req, err := http.NewRequest(http.MethodGet, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/players", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to form request: %w", err)
 	}
@@ -79,8 +79,12 @@ func (c *Client) Players(gID string) ([]*web.Player, error) {
 	return resp, nil
 }
 
-func (c *Client) JoinGame(gID string) error {
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/join", nil)
+func (c *Client) JoinGame(gID codenames.GameID, pt codenames.PlayerType) error {
+	body := struct {
+		PlayerType string `json:"player_type"`
+	}{string(pt)}
+
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/join", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -92,14 +96,14 @@ func (c *Client) JoinGame(gID string) error {
 	return nil
 }
 
-func (c *Client) AssignRole(gID, uID, team, role string) error {
+func (c *Client) AssignRole(gID codenames.GameID, pID codenames.PlayerID, team codenames.Team, role codenames.Role) error {
 	body := struct {
-		UserID string `json:"user_id"`
-		Team   string `json:"team"`
-		Role   string `json:"role"`
-	}{uID, team, role}
+		PlayerID codenames.PlayerID `json:"player_id"`
+		Team     string             `json:"team"`
+		Role     string             `json:"role"`
+	}{pID, string(team), string(role)}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/assignRole", toBody(body))
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/assignRole", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -111,12 +115,12 @@ func (c *Client) AssignRole(gID, uID, team, role string) error {
 	return nil
 }
 
-func (c *Client) StartGame(gID string) error {
+func (c *Client) StartGame(gID codenames.GameID) error {
 	body := struct {
 		RandomAssignment bool `json:"random_assignment"`
 	}{true}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/start", toBody(body))
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/start", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -128,13 +132,13 @@ func (c *Client) StartGame(gID string) error {
 	return nil
 }
 
-func (c *Client) GiveClue(gID string, clue *codenames.Clue) error {
+func (c *Client) GiveClue(gID codenames.GameID, clue *codenames.Clue) error {
 	body := struct {
 		Word  string `json:"word"`
 		Count int    `json:"count"`
 	}{clue.Word, clue.Count}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/clue", toBody(body))
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/clue", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}
@@ -146,13 +150,13 @@ func (c *Client) GiveClue(gID string, clue *codenames.Clue) error {
 	return nil
 }
 
-func (c *Client) GiveGuess(gID, guess string, confirmed bool) error {
+func (c *Client) GiveGuess(gID codenames.GameID, guess string, confirmed bool) error {
 	body := struct {
 		Guess     string `json:"guess"`
 		Confirmed bool   `json:"confirmed"`
 	}{guess, confirmed}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+gID+"/guess", toBody(body))
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/guess", toBody(body))
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}

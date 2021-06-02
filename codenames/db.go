@@ -17,9 +17,21 @@ var (
 type PlayerType string
 
 const (
-	PlayerTypeHuman = PlayerType("human")
-	PlayerTypeRobot = PlayerType("robot")
+	UnknownPlayerType = PlayerType("")
+	PlayerTypeHuman   = PlayerType("HUMAN")
+	PlayerTypeRobot   = PlayerType("ROBOT")
 )
+
+func ToPlayerType(typ string) (PlayerType, bool) {
+	switch typ {
+	case "HUMAN":
+		return PlayerTypeHuman, true
+	case "ROBOT":
+		return PlayerTypeRobot, true
+	default:
+		return UnknownPlayerType, false
+	}
+}
 
 type PlayerID struct {
 	PlayerType PlayerType `json:"player_type"`
@@ -34,10 +46,20 @@ func (p PlayerID) IsUser(uID UserID) bool {
 	return p.PlayerType == PlayerTypeHuman && p.ID == string(uID)
 }
 
+func (p PlayerID) IsRobot(rID RobotID) bool {
+	return p.PlayerType == PlayerTypeRobot && p.ID == string(rID)
+}
+
 type UserID string
 
 func (u UserID) AsPlayerID() PlayerID {
 	return PlayerID{PlayerType: PlayerTypeHuman, ID: string(u)}
+}
+
+type RobotID string
+
+func (r RobotID) AsPlayerID() PlayerID {
+	return PlayerID{PlayerType: PlayerTypeRobot, ID: string(r)}
 }
 
 type GameID string
@@ -208,6 +230,7 @@ type DB interface {
 	PlayersInGame(gID GameID) ([]*PlayerRole, error)
 	UpdateState(GameID, *GameState) error
 	BatchPlayerNames([]PlayerID) (map[PlayerID]string, error)
+	Player(id PlayerID) (string, error)
 }
 
 func RandomGameID(r *rand.Rand) GameID {

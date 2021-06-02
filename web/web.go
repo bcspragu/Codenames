@@ -294,8 +294,23 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request, u *codenames
 		}{true})
 	}
 
+	var req struct {
+		PlayerType string `json:"player_type"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return httperr.BadRequest("failed to decode join request: %w", err)
+	}
+
+	playerType, ok := codenames.ToPlayerType(req.PlayerType)
+	if !ok {
+		return httperr.
+			BadRequest("unknown player type %q given", req.PlayerType).
+			WithMessage("bad player type")
+	}
+
 	pID := codenames.PlayerID{
-		PlayerType: codenames.PlayerTypeHuman,
+		PlayerType: playerType,
 		ID:         string(u.ID),
 	}
 	if err := s.db.JoinGame(game.ID, pID); err != nil {
@@ -311,21 +326,21 @@ func (s *Srv) serveJoinGame(w http.ResponseWriter, r *http.Request, u *codenames
 
 func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *codenames.User, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
 	var req struct {
-		UserID string `json:"user_id"`
-		Team   string `json:"team"`
-		Role   string `json:"role"`
+		PlayerID codenames.PlayerID `json:"player_id"`
+		Team     string             `json:"team"`
+		Role     string             `json:"role"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return httperr.BadRequest("failed to decode assign role request: %w", err)
 	}
 
-	u, err := s.db.User(codenames.UserID(req.UserID))
-	if err != nil {
+	if _, err := s.db.Player(req.PlayerID); err != nil {
 		return httperr.
-			BadRequest("failed to load user %q in assignRole: %w", req.UserID, err).
-			WithMessage("bad user ID given")
+			BadRequest("failed to load player %q in assignRole: %w", req.PlayerID, err).
+			WithMessage("bad player ID given")
 	}
+	pID := req.PlayerID
 
 	desiredRole, ok := codenames.ToRole(req.Role)
 	if !ok {
@@ -351,9 +366,9 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 		if !ok {
 			rc = make(map[codenames.Team]int)
 		}
-		if pr.PlayerID.IsUser(u.ID) {
+		if pr.PlayerID == pID {
 			return httperr.
-				BadRequest("user %q tried to join game %q as %q %q, already joined as %q %q", u.ID, game.ID, desiredTeam, desiredRole, pr.Team, pr.Role).
+				BadRequest("player %q tried to join game %q as %q %q, already joined as %q %q", pID, game.ID, desiredTeam, desiredRole, pr.Team, pr.Role).
 				WithMessage(fmt.Sprintf("can't join game as %q %q, already joined as %q %q", desiredTeam, desiredRole, pr.Team, pr.Role))
 		}
 		if pr.Role == codenames.SpymasterRole && rc[pr.Team] > 1 {
@@ -372,30 +387,28 @@ func (s *Srv) serveAssignRole(w http.ResponseWriter, r *http.Request, creator *c
 
 	if desiredRole == codenames.SpymasterRole && roleCount[codenames.SpymasterRole][desiredTeam] > 0 {
 		return httperr.
-			BadRequest("user %q wanted to be %q spymaster, but that role is already filled in game %q", u.ID, desiredTeam, game.ID).
+			BadRequest("player %q wanted to be %q spymaster, but that role is already filled in game %q", pID, desiredTeam, game.ID).
 			WithMessage(fmt.Sprintf("team %q already has a spymaster", desiredTeam))
 	}
 	if desiredRole == codenames.OperativeRole && roleCount[codenames.OperativeRole][desiredTeam] >= maxOperativesPerTeam {
 		return httperr.
-			BadRequest("user %q wanted to be a %q operative, but that team already has the max number of operatives in game %q", u.ID, desiredTeam, game.ID).
+			BadRequest("player %q wanted to be a %q operative, but that team already has the max number of operatives in game %q", pID, desiredTeam, game.ID).
 			WithMessage(fmt.Sprintf("team %q already has max operatives", desiredTeam))
 	}
 
 	if err := s.db.AssignRole(game.ID, &codenames.PlayerRole{
-		PlayerID: codenames.PlayerID{
-			PlayerType: codenames.PlayerTypeHuman,
-			ID:         string(u.ID),
-		},
-		Team: desiredTeam,
-		Role: desiredRole,
+		PlayerID: pID,
+		Team:     desiredTeam,
+		Role:     desiredRole,
 	}); err != nil {
 		return httperr.
-			Internal("failed to assign role (%q, %q) to player %q in game %q: %w", desiredTeam, desiredRole, u.ID, game.ID, err).
+			Internal("failed to assign role (%q, %q) to player %q in game %q: %w", desiredTeam, desiredRole, pID, game.ID, err).
 			WithMessage("failed to assign role to player")
 	}
 
 	// Load the updated list of players in the game.
-	if prs, err = s.db.PlayersInGame(game.ID); err != nil {
+	prs, err := s.db.PlayersInGame(game.ID)
+	if err != nil {
 		return httperr.
 			Internal("failed to load players in game %q: %w", game.ID, err).
 			WithMessage("failed to load players in game")

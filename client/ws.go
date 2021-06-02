@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/web"
 	"github.com/gorilla/websocket"
 )
@@ -18,13 +19,13 @@ type wsClient struct {
 	hooks WSHooks
 }
 
-func (c *Client) ListenForUpdates(gID string, hooks WSHooks) error {
+func (c *Client) ListenForUpdates(gID codenames.GameID, hooks WSHooks) error {
 	scheme := "ws"
 	if c.scheme == "https" {
 		scheme = "wss"
 	}
 
-	addr := scheme + "://" + c.addr + "/api/game/" + gID + "/ws"
+	addr := scheme + "://" + c.addr + "/api/game/" + string(gID) + "/ws"
 
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,

@@ -9,12 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bcspragu/Codenames/cryptorand"
 	"github.com/bcspragu/Codenames/sqldb"
 	"github.com/bcspragu/Codenames/web"
 	"github.com/gorilla/securecookie"
 	"github.com/namsral/flag"
 
-	cryptorand "crypto/rand"
 	"math/rand"
 )
 
@@ -26,7 +26,7 @@ func main() {
 
 	flag.Parse()
 
-	r := rand.New(cryptoRandSource{})
+	r := rand.New(cryptorand.NewSource())
 	db, err := sqldb.New(*dbPath, r)
 	if err != nil {
 		log.Fatalf("failed to initialize datastore: %v", err)
@@ -50,26 +50,6 @@ func main() {
 		log.Fatal("ListenAndServe: ", err)
 	}
 }
-
-type cryptoRandSource struct{}
-
-func (cryptoRandSource) Int63() int64 {
-	var buf [8]byte
-	_, err := cryptorand.Read(buf[:])
-	if err != nil {
-		panic(err)
-	}
-	return int64(buf[0]) |
-		int64(buf[1])<<8 |
-		int64(buf[2])<<16 |
-		int64(buf[3])<<24 |
-		int64(buf[4])<<32 |
-		int64(buf[5])<<40 |
-		int64(buf[6])<<48 |
-		int64(buf[7]&0x7f)<<56
-}
-
-func (cryptoRandSource) Seed(int64) {}
 
 func loadKeys() (*securecookie.SecureCookie, error) {
 	hashKey, err := loadOrGenKey("hashKey")
