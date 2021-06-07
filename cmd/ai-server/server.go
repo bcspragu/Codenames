@@ -2,21 +2,23 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"code.sajari.com/word2vec"
 	"github.com/bcspragu/Codenames/client"
 	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/httperr"
+	"github.com/bcspragu/Codenames/w2v"
 	"github.com/bcspragu/Codenames/web"
 )
 
 type Server struct {
-	model           *word2vec.Model
+	ai              *w2v.AI
 	authSecret      string
 	webServerScheme string
 	webServerAddr   string
@@ -25,9 +27,9 @@ type Server struct {
 	mux *http.ServeMux
 }
 
-func newServer(model *word2vec.Model, authSecret, webServerScheme, webServerAddr string, r *rand.Rand) *Server {
+func newServer(ai *w2v.AI, authSecret, webServerScheme, webServerAddr string, r *rand.Rand) *Server {
 	srv := &Server{
-		model:           model,
+		ai:              ai,
 		authSecret:      authSecret,
 		webServerScheme: webServerScheme,
 		webServerAddr:   webServerAddr,
@@ -85,13 +87,13 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 		return httperr.Internal("failed to init Codenames client: %w", err)
 	}
 
-	uID, err := c.CreateUser(name)
+	pID, err := c.CreateUser(name, codenames.PlayerTypeRobot)
 	if err != nil {
 		return httperr.Internal("failed to create user %q: %w", name, err)
 	}
-	rID := codenames.RobotID(uID)
+	rID := codenames.RobotID(pID)
 
-	if err := c.JoinGame(gID, codenames.PlayerTypeRobot); err != nil {
+	if err := c.JoinGame(gID); err != nil {
 		return httperr.Internal("failed to join game %q: %w", gID, err)
 	}
 
@@ -116,19 +118,41 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 		},
 		OnClueGiven: func(cg *web.ClueGiven) {
 			if role != codenames.OperativeRole || cg.Team != team {
+				fmt.Printf("Clue was given, but I'm an %q on team %q\n", role, team)
+				return
+			}
+			fmt.Println("Clue was given, and I'm guessing!")
+
+			guess, err := s.guess(cg.Game.State.Board, cg.Clue)
+			if err != nil {
+				log.Printf("[ERROR] failed to make a guess for clue %+v: %v", cg.Clue, err)
 				return
 			}
 
-			// TODO(bcspragu): If we're here, come up with our answer to the clue.
+			if err := c.GiveGuess(gID, guess, true /* confirmed */); err != nil {
+				log.Printf("[ERROR] failed to give guess %q for clue %+v: %v", guess, cg.Clue, err)
+				return
+			}
 		},
 		OnGuessGiven: func(gg *web.GuessGiven) {
 			// We only want to formulate a clue when the *other* team has just
 			// finished guessing.
 			if role != codenames.SpymasterRole || gg.Team == team || gg.CanKeepGuessing {
+				fmt.Printf("Guess was given, but I'm an %q on team %q\n", role, team)
+				return
+			}
+			fmt.Println("Guess was given, my turn to clue!")
+
+			clue, err := s.giveClue(gg.Game.State.Board, toAgent(team))
+			if err != nil {
+				log.Printf("[ERROR] failed to make a clue: %v", err)
 				return
 			}
 
-			// TODO(bcspragu): If we're here, come up with our clue.
+			if err := c.GiveClue(gID, clue); err != nil {
+				log.Printf("[ERROR] failed to give clue: %v", err)
+				return
+			}
 		},
 	})
 	if err != nil {
@@ -136,6 +160,48 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return nil
+}
+
+func (s *Server) giveClue(b *codenames.Board, agent codenames.Agent) (*codenames.Clue, error) {
+	clue, err := s.ai.GiveClue(b, agent)
+	if err != nil {
+		log.Printf("[ERROR] AI failed to make a clue: %v", err)
+		return &codenames.Clue{
+			Word:  "lolgoodluck",
+			Count: 1,
+		}, nil
+	}
+
+	return clue, nil
+}
+
+func toAgent(team codenames.Team) codenames.Agent {
+	switch team {
+	case codenames.BlueTeam:
+		return codenames.BlueAgent
+	case codenames.RedTeam:
+		return codenames.RedAgent
+	default:
+		return codenames.UnknownAgent
+	}
+}
+
+func (s *Server) guess(b *codenames.Board, clue *codenames.Clue) (string, error) {
+	guess, err := s.ai.Guess(b, clue)
+	if err != nil {
+		log.Printf("[ERROR] AI failed to make a guess: %v", err)
+		return s.guessRandomly(b, clue)
+	}
+	return guess, nil
+}
+
+func (s *Server) guessRandomly(b *codenames.Board, clue *codenames.Clue) (string, error) {
+	unused := codenames.Unused(b.Cards)
+	if len(unused) == 0 {
+		return "", errors.New("no available cards left on the board")
+	}
+
+	return unused[s.r.Intn(len(unused))].Codename, nil
 }
 
 func (s *Server) aiName() string {

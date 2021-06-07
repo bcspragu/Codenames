@@ -32,12 +32,22 @@ func New(scheme, addr string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) CreateUser(name string) (string, error) {
+func (c *Client) CreateUser(name string, pt codenames.PlayerType) (string, error) {
 	body := struct {
 		Name string `json:"name"`
 	}{name}
 
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/user", toBody(body))
+	endpoint := c.scheme + "://" + c.addr + "/api/"
+	switch pt {
+	case codenames.PlayerTypeHuman:
+		endpoint += "user"
+	case codenames.PlayerTypeRobot:
+		endpoint += "ai"
+	default:
+		return "", fmt.Errorf("unknown player type %q", pt)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpoint, toBody(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to form request: %w", err)
 	}
@@ -79,12 +89,8 @@ func (c *Client) Players(gID codenames.GameID) ([]*web.Player, error) {
 	return resp, nil
 }
 
-func (c *Client) JoinGame(gID codenames.GameID, pt codenames.PlayerType) error {
-	body := struct {
-		PlayerType string `json:"player_type"`
-	}{string(pt)}
-
-	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/join", toBody(body))
+func (c *Client) JoinGame(gID codenames.GameID) error {
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/join", nil)
 	if err != nil {
 		return fmt.Errorf("failed to form request: %w", err)
 	}

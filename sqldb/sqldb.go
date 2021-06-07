@@ -34,6 +34,10 @@ WHERE id = ?`
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
 	getUserStmt    = `SELECT id, display_name FROM Users WHERE id = ?`
 
+	// Robot statements
+	createAIStmt = `INSERT INTO AIs (id, display_name) VALUES (?, ?)`
+	getRobotStmt = `SELECT id, display_name FROM AIs WHERE id = ?`
+
 	// Player (e.g. user or AI) statements
 	getUserPlayerStmt = `SELECT id FROM Players WHERE user_id = ?`
 	getAIPlayerStmt   = `SELECT id FROM Players WHERE ai_id = ?`
@@ -204,7 +208,7 @@ func (s *DB) Game(gID codenames.GameID) (*codenames.Game, error) {
 	return res.game, nil
 }
 
-func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
+func (s *DB) NewUser(name string) (codenames.UserID, error) {
 	type result struct {
 		id  codenames.UserID
 		err error
@@ -213,7 +217,7 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 	resChan := make(chan *result)
 	s.dbChan <- func(sdb *sql.DB) {
 		id := codenames.RandomUserID(s.r)
-		_, err := sdb.Exec(createUserStmt, string(id), u.Name)
+		_, err := sdb.Exec(createUserStmt, string(id), name)
 		if err != nil {
 			resChan <- &result{err: err}
 			return
@@ -225,6 +229,31 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 	res := <-resChan
 	if res.err != nil {
 		return codenames.UserID(""), res.err
+	}
+	return res.id, nil
+}
+
+func (s *DB) NewRobot(name string) (codenames.RobotID, error) {
+	type result struct {
+		id  codenames.RobotID
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		id := codenames.RandomRobotID(s.r)
+		_, err := sdb.Exec(createAIStmt, string(id), name)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{id: id}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return codenames.RobotID(""), res.err
 	}
 	return res.id, nil
 }
@@ -255,6 +284,34 @@ func (s *DB) User(id codenames.UserID) (*codenames.User, error) {
 		return nil, res.err
 	}
 	return res.user, nil
+}
+
+func (s *DB) Robot(id codenames.RobotID) (*codenames.Robot, error) {
+	type result struct {
+		robot *codenames.Robot
+		err   error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		var r codenames.Robot
+		err := sdb.QueryRow(getRobotStmt, string(id)).Scan(&r.ID, &r.Name)
+		if err == sql.ErrNoRows {
+			resChan <- &result{err: codenames.ErrRobotNotFound}
+			return
+		} else if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{robot: &r}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.robot, nil
 }
 
 func (s *DB) PendingGames() ([]codenames.GameID, error) {

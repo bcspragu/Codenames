@@ -17,7 +17,7 @@ const (
 
 type Spymaster interface {
 	// GiveClue takes in a board and returns a clue for players to guess with.
-	GiveClue(*Board) (*Clue, error)
+	GiveClue(*Board, Agent) (*Clue, error)
 }
 
 type Operative interface {

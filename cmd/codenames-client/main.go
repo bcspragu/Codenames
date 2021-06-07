@@ -32,7 +32,7 @@ func main() {
 		log.Fatalf("failed to create client: %v", err)
 	}
 
-	userID, err := c.CreateUser(name)
+	userID, err := c.CreateUser(name, codenames.PlayerTypeHuman)
 	if err != nil {
 		log.Fatalf("failed to create user: %v", err)
 	}
@@ -49,7 +49,7 @@ func main() {
 		gameID = codenames.GameID(gameToJoin)
 	}
 
-	if err := c.JoinGame(gameID, codenames.PlayerTypeHuman); err != nil {
+	if err := c.JoinGame(gameID); err != nil {
 		log.Fatalf("failed to join game: %v", err)
 	}
 

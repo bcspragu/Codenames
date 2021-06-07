@@ -28,8 +28,8 @@ type connection struct {
 	id string
 	h  *Hub
 	// What room this connection is associated with.
-	gameID codenames.GameID
-	userID codenames.UserID
+	gameID   codenames.GameID
+	playerID codenames.PlayerID
 	// The websocket connection.
 	ws *websocket.Conn
 

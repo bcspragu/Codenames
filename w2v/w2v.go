@@ -2,7 +2,6 @@ package w2v
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
@@ -18,56 +17,59 @@ type AI struct {
 
 // Init initializes the word2vec model.
 func New(file string) (*AI, error) {
-	log.Println("Opening w2v model...")
 	f, err := os.Open(file)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open model file %q: %v", file, err)
 	}
 	defer f.Close()
 
-	log.Println("Reading w2v model...")
 	model, err := word2vec.FromReader(f)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse model file %q: %v", file, err)
 	}
 
-	log.Println("Read w2v model")
 	return &AI{Model: model}, nil
 }
 
-func (ai *AI) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
-
+func (ai *AI) GiveClue(b *codenames.Board, agent codenames.Agent) (*codenames.Clue, error) {
 	bestScore := float32(-1.0)
 	clue := "???"
 
-	unused := codenames.Targets(b.Cards, codenames.RedAgent)
-	log.Print(unused)
-	for i := 0; i < len(unused); i++ {
+	unused := codenames.Targets(b.Cards, agent)
+	for _, card := range unused {
+
 		expr := word2vec.Expr{}
-		expr.Add(1, unused[i].Codename)
-		matches, _ := ai.Model.CosN(expr, 2)
-		match := matches[1]
-		log.Printf("%v = %s %f", unused[i], match.Word, match.Score)
-		if match.Score > bestScore {
-			bestScore = match.Score
-			clue = match.Word
+		expr.Add(1, card.Codename)
+		matches, err := ai.Model.CosN(expr, 5)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load similar words: %w", err)
+		}
+
+		for _, match := range matches {
+			if tooCloseToBoardWord(match.Word, b) {
+				continue
+			}
+			if match.Score > bestScore {
+				bestScore = match.Score
+				clue = match.Word
+			}
 		}
 	}
-
-	// TODO: Confirm that the clue chosen isn't a superset of any of the words on
-	// the board (ex. 'band' and 'bands').
 
 	return &codenames.Clue{Word: clue, Count: 1}, nil
 }
 
+func tooCloseToBoardWord(clue string, b *codenames.Board) bool {
+	for _, card := range b.Cards {
+		if strings.Contains(clue, card.Codename) || strings.Contains(card.Codename, clue) {
+			return true
+		}
+	}
+	return false
+}
+
 func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
 	unused := codenames.Unused(b.Cards)
-
-	// TODO: Probably remove this check, maybe when we support the sneaky 0-count
-	// clue.
-	if c.Count > len(unused) {
-		return "", fmt.Errorf("clue was for %d words, only %d words are available", c.Count, len(unused))
-	}
 
 	pairs := make([]struct {
 		Word       string
@@ -76,8 +78,11 @@ func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
 
 	for i, card := range unused {
 		sim, err := ai.similarity(c.Word, card.Codename)
+		if _, ok := err.(word2vec.NotFoundError); ok {
+			continue
+		}
 		if err != nil {
-			return "", fmt.Errorf("failed to get similarity of %q and %q: %v", c.Word, card.Codename, err)
+			return "", fmt.Errorf("failed to get similarity of %q and %q: %w", c.Word, card.Codename, err)
 		}
 
 		pairs[i].Word = card.Codename

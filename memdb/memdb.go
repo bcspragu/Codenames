@@ -9,14 +9,16 @@ import (
 type idNamespace string
 
 const (
-	gameID = idNamespace("game")
-	userID = idNamespace("user")
+	gameID  = idNamespace("game")
+	userID  = idNamespace("user")
+	robotID = idNamespace("robot")
 )
 
 type DB struct {
 	ids         map[idNamespace]int
 	games       map[codenames.GameID]*codenames.Game
 	users       map[codenames.UserID]*codenames.User
+	robots      map[codenames.RobotID]*codenames.Robot
 	playerRoles map[codenames.GameID][]*codenames.PlayerRole
 }
 
@@ -25,6 +27,7 @@ func New() *DB {
 		ids:         make(map[idNamespace]int),
 		games:       make(map[codenames.GameID]*codenames.Game),
 		users:       make(map[codenames.UserID]*codenames.User),
+		robots:      make(map[codenames.RobotID]*codenames.Robot),
 		playerRoles: make(map[codenames.GameID][]*codenames.PlayerRole),
 	}
 }
@@ -50,12 +53,12 @@ func (db *DB) Game(gID codenames.GameID) (*codenames.Game, error) {
 	return g.Clone(), nil
 }
 
-func (db *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
+func (db *DB) NewUser(name string) (codenames.UserID, error) {
 	uID := codenames.UserID(db.newID(userID))
 
-	uc := u.Clone()
-	uc.ID = uID
-	db.users[uID] = uc
+	u := &codenames.User{ID: uID, Name: name}
+	u.ID = uID
+	db.users[uID] = u
 
 	return uID, nil
 }
@@ -67,6 +70,25 @@ func (db *DB) User(uID codenames.UserID) (*codenames.User, error) {
 	}
 
 	return u.Clone(), nil
+}
+
+func (db *DB) NewRobot(name string) (codenames.RobotID, error) {
+	rID := codenames.RobotID(db.newID(robotID))
+
+	r := &codenames.Robot{ID: rID, Name: name}
+	r.ID = rID
+	db.robots[rID] = r
+
+	return rID, nil
+}
+
+func (db *DB) Robot(rID codenames.RobotID) (*codenames.Robot, error) {
+	r, ok := db.robots[rID]
+	if !ok {
+		return nil, codenames.ErrRobotNotFound
+	}
+
+	return r.Clone(), nil
 }
 
 func (db *DB) PendingGames() ([]codenames.GameID, error) {

@@ -16,13 +16,22 @@ type Spymaster struct {
 	In io.Reader
 	// out is where the prompts should be written out to.
 	Out io.Writer
-	// team is which team this Spymaster is on.
-	Team codenames.Team
 }
 
-func (s *Spymaster) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
+func agentStr(a codenames.Agent) string {
+	switch a {
+	case codenames.BlueAgent:
+		return "Blue"
+	case codenames.RedAgent:
+		return "Red"
+	default:
+		return "Unknown"
+	}
+}
+
+func (s *Spymaster) GiveClue(b *codenames.Board, agent codenames.Agent) (*codenames.Clue, error) {
 	s.printBoard(b)
-	fmt.Fprintf(s.Out, "%s Spymaster, enter a clue [ex. 'Muffins 3']: ", s.Team)
+	fmt.Fprintf(s.Out, "%s Spymaster, enter a clue [ex. 'Muffins 3']: ", agentStr(agent))
 	sc := bufio.NewScanner(s.In)
 	if !sc.Scan() {
 		return nil, fmt.Errorf("scanner error: %v", sc.Err())

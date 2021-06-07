@@ -11,6 +11,7 @@ import (
 var (
 	ErrOperationNotImplemented = errors.New("codenames: operation not implemented")
 	ErrUserNotFound            = errors.New("codenames: user not found")
+	ErrRobotNotFound           = errors.New("codenames: robot not found")
 	ErrGameNotFound            = errors.New("codenames: game not found")
 )
 
@@ -36,6 +37,20 @@ func ToPlayerType(typ string) (PlayerType, bool) {
 type PlayerID struct {
 	PlayerType PlayerType `json:"player_type"`
 	ID         string     `json:"id"`
+}
+
+func (p PlayerID) AsUserID() (UserID, bool) {
+	if p.PlayerType != PlayerTypeHuman {
+		return "", false
+	}
+	return UserID(p.ID), true
+}
+
+func (p PlayerID) AsRobotID() (RobotID, bool) {
+	if p.PlayerType != PlayerTypeRobot {
+		return "", false
+	}
+	return RobotID(p.ID), true
 }
 
 func (p PlayerID) String() string {
@@ -94,6 +109,38 @@ func ToRole(role string) (Role, bool) {
 		return OperativeRole, true
 	default:
 		return NoRole, false
+	}
+}
+
+type Player struct {
+	ID   PlayerID `json:"player_id"`
+	Name string   `json:"name"`
+}
+
+func (p *Player) Clone() *Player {
+	if p == nil {
+		return nil
+	}
+
+	return &Player{
+		ID:   p.ID,
+		Name: p.Name,
+	}
+}
+
+type Robot struct {
+	ID   RobotID `json:"id"`
+	Name string  `json:"name"`
+}
+
+func (r *Robot) Clone() *Robot {
+	if r == nil {
+		return nil
+	}
+
+	return &Robot{
+		ID:   r.ID,
+		Name: r.Name,
 	}
 }
 
@@ -217,8 +264,10 @@ func AllRolesFilled(prs []*PlayerRole) error {
 }
 
 type DB interface {
-	NewUser(*User) (UserID, error)
+	NewUser(name string) (UserID, error)
 	User(UserID) (*User, error)
+	NewRobot(name string) (RobotID, error)
+	Robot(RobotID) (*Robot, error)
 
 	NewGame(*Game) (GameID, error)
 	StartGame(gID GameID) error
@@ -256,7 +305,15 @@ func RandomUserID(r *rand.Rand) UserID {
 	for i := range b {
 		b[i] = letters[r.Intn(len(letters))]
 	}
-	return UserID(b)
+	return UserID("human_" + string(b))
+}
+
+func RandomRobotID(r *rand.Rand) RobotID {
+	b := make([]byte, 64)
+	for i := range b {
+		b[i] = letters[r.Intn(len(letters))]
+	}
+	return RobotID("robot_" + string(b))
 }
 
 func randomWord(r *rand.Rand) string {

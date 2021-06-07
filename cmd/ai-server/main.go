@@ -2,14 +2,12 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
-	"os"
 
-	"code.sajari.com/word2vec"
 	"github.com/bcspragu/Codenames/cryptorand"
+	"github.com/bcspragu/Codenames/w2v"
 )
 
 func main() {
@@ -37,31 +35,16 @@ func main() {
 		log.Fatal("--web_server_addr must be provided")
 	}
 
-	model, err := loadModel(*modelPath)
+	ai, err := w2v.New(*modelPath)
 	if err != nil {
-		log.Fatalf("failed to load model: %v", err)
+		log.Fatalf("failed to load AI: %v", err)
 	}
 
 	r := rand.New(cryptorand.NewSource())
 
-	srv := newServer(model, *authSecret, *webServerScheme, *webServerAddr, r)
+	srv := newServer(ai, *authSecret, *webServerScheme, *webServerAddr, r)
 
-	if err := http.ListenAndServe(":8080", srv); err != nil {
+	if err := http.ListenAndServe(":8081", srv); err != nil {
 		log.Fatalf("error from server: %v", err)
 	}
-}
-
-func loadModel(path string) (*word2vec.Model, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read model path: %w", err)
-	}
-	defer f.Close()
-
-	model, err := word2vec.FromReader(f)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load model: %w", err)
-	}
-
-	return model, nil
 }

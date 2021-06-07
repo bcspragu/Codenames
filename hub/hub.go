@@ -19,8 +19,8 @@ type Hub struct {
 	// Messages to send to everyone in a game.
 	broadcast chan *broadcastMsg
 
-	// Messages to send to a single person in a game.
-	user chan *userMsg
+	// Messages to send to a single player in a game.
+	player chan *playerMsg
 
 	// Register requests from the connections.
 	register chan *connection
@@ -33,7 +33,7 @@ type Hub struct {
 func New() *Hub {
 	h := &Hub{
 		broadcast:   make(chan *broadcastMsg),
-		user:        make(chan *userMsg),
+		player:      make(chan *playerMsg),
 		register:    make(chan *connection),
 		unregister:  make(chan *connection),
 		connections: make(map[codenames.GameID][]*connection),
@@ -58,9 +58,9 @@ func (h *Hub) run() {
 					h.deleteConn(c)
 				}
 			}
-		case m := <-h.user:
+		case m := <-h.player:
 			for _, c := range h.connections[m.gameID] {
-				if c.userID == m.userID {
+				if c.playerID == m.playerID {
 					select {
 					case c.send <- m.msg:
 					default:
@@ -106,36 +106,36 @@ func (h *Hub) ToGame(gID codenames.GameID, msg interface{}) error {
 	return nil
 }
 
-type userMsg struct {
-	gameID codenames.GameID
-	userID codenames.UserID
-	msg    []byte
+type playerMsg struct {
+	gameID   codenames.GameID
+	playerID codenames.PlayerID
+	msg      []byte
 }
 
-func (h *Hub) ToUser(gID codenames.GameID, uID codenames.UserID, msg interface{}) error {
+func (h *Hub) ToPlayer(gID codenames.GameID, pID codenames.PlayerID, msg interface{}) error {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(msg); err != nil {
 		return fmt.Errorf("failed to encode message: %w", err)
 	}
 
-	h.user <- &userMsg{
-		gameID: gID,
-		userID: uID,
-		msg:    buf.Bytes(),
+	h.player <- &playerMsg{
+		gameID:   gID,
+		playerID: pID,
+		msg:      buf.Bytes(),
 	}
 
 	return nil
 }
 
 // Register associates a connection with the hub and a given game.
-func (h *Hub) Register(ws *websocket.Conn, gID codenames.GameID, uID codenames.UserID) {
+func (h *Hub) Register(ws *websocket.Conn, gID codenames.GameID, pID codenames.PlayerID) {
 	conn := &connection{
-		id:     newID(gID),
-		h:      h,
-		gameID: gID,
-		userID: uID,
-		send:   make(chan []byte, 256),
-		ws:     ws,
+		id:       newID(gID),
+		h:        h,
+		gameID:   gID,
+		playerID: pID,
+		send:     make(chan []byte, 256),
+		ws:       ws,
 	}
 	h.register <- conn
 	go conn.writePump()

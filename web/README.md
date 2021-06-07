@@ -14,7 +14,10 @@ generally RESTful way. The endpoints are as follows:
   ```
   == Example Request ==
   POST /api/user
-  {"name": "Testy McTesterson"}
+  {
+    "name": "Testy McTesterson",
+    "player_type": "HUMAN"
+  }
 
   == Example Response ==
   Set-Cookie Authorization $SOME_ENCRYPTED_AUTH_TOKEN
@@ -119,13 +122,12 @@ generally RESTful way. The endpoints are as follows:
 
 * `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
   select roles, they just join games. The host will then assign roles to the
-  users in a given game. Clients should set the `player_type` to `HUMAN` to
-  distinguish from AI players.
+  users in a given game.
 
   ```
   == Example Request ==
   POST /api/game/TheGameID123/join
-  {"player_type": "HUMAN"}
+  {} // No body or anything
 
   == Example Response ==
   {"success": true}
@@ -265,7 +267,10 @@ message structure, or look at the handy guide below:
   ```
   {
     "action": "PLAYER_VOTE",
-    "user_id": "abc123",
+    "player_id": {
+      "player_type": "ROBOT",
+      "id": "abc123"
+    },
     "guess": "blade",
     "confirmed": true
   }
