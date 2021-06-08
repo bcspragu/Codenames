@@ -149,6 +149,17 @@ func Targets(cards []Card, agent Agent) []Card {
 	return out
 }
 
+// Unrevealed returns a list of cards that haven't been turned over yet.
+func Unrevealed(cards []Card) []Card {
+	var out []Card
+	for _, card := range cards {
+		if !card.Revealed {
+			out = append(out, card)
+		}
+	}
+	return out
+}
+
 // Revealed takes in a fully-filled out Spymaster board, and returns a new
 // board where the card Agent is only populated for revealed cards.
 func Revealed(b *Board) *Board {

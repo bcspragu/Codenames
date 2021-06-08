@@ -98,8 +98,9 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var (
-		role codenames.Role
-		team codenames.Team
+		role     codenames.Role
+		team     codenames.Team
+		lastClue *codenames.Clue
 	)
 
 	err = c.ListenForUpdates(gID, client.WSHooks{
@@ -113,12 +114,29 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 				}
 				role = p.Role
 				team = p.Team
-				return
+				break
+			}
+
+			if role == codenames.SpymasterRole && gs.Game.State.ActiveTeam == team {
+				clue, err := s.giveClue(gs.Game.State.Board, toAgent(team))
+				if err != nil {
+					log.Printf("[ERROR] failed to make a clue: %v", err)
+					return
+				}
+
+				if err := c.GiveClue(gID, clue); err != nil {
+					log.Printf("[ERROR] failed to give clue: %v", err)
+					return
+				}
 			}
 		},
 		OnClueGiven: func(cg *web.ClueGiven) {
+			if cg.Team == team {
+				lastClue = cg.Clue
+			}
+
 			if role != codenames.OperativeRole || cg.Team != team {
-				fmt.Printf("Clue was given, but I'm an %q on team %q\n", role, team)
+				fmt.Printf("Clue was given, but I'm a/an %q on team %q\n", role, team)
 				return
 			}
 			fmt.Println("Clue was given, and I'm guessing!")
@@ -137,20 +155,37 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 		OnGuessGiven: func(gg *web.GuessGiven) {
 			// We only want to formulate a clue when the *other* team has just
 			// finished guessing.
-			if role != codenames.SpymasterRole || gg.Team == team || gg.CanKeepGuessing {
-				fmt.Printf("Guess was given, but I'm an %q on team %q\n", role, team)
+			if gg.Team != team && !gg.CanKeepGuessing && role == codenames.SpymasterRole {
+				fmt.Println("My turn to clue!")
+
+				clue, err := s.giveClue(gg.Game.State.Board, toAgent(team))
+				if err != nil {
+					log.Printf("[ERROR] failed to make a clue: %v", err)
+					return
+				}
+
+				if err := c.GiveClue(gID, clue); err != nil {
+					log.Printf("[ERROR] failed to give clue: %v", err)
+					return
+				}
+
 				return
 			}
-			fmt.Println("Guess was given, my turn to clue!")
 
-			clue, err := s.giveClue(gg.Game.State.Board, toAgent(team))
-			if err != nil {
-				log.Printf("[ERROR] failed to make a clue: %v", err)
-				return
-			}
+			if gg.Team == team && gg.CanKeepGuessing && role == codenames.OperativeRole {
+				fmt.Println("I can keep guessing!")
 
-			if err := c.GiveClue(gID, clue); err != nil {
-				log.Printf("[ERROR] failed to give clue: %v", err)
+				guess, err := s.guess(gg.Game.State.Board, lastClue)
+				if err != nil {
+					log.Printf("[ERROR] failed to make a guess for clue %+v: %v", lastClue, err)
+					return
+				}
+
+				if err := c.GiveGuess(gID, guess, true /* confirmed */); err != nil {
+					log.Printf("[ERROR] failed to give guess %q for clue %+v: %v", guess, lastClue, err)
+					return
+				}
+
 				return
 			}
 		},

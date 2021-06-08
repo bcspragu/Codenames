@@ -317,5 +317,9 @@ func RandomRobotID(r *rand.Rand) RobotID {
 }
 
 func randomWord(r *rand.Rand) string {
-	return strings.Title(Words[r.Intn(len(Words))])
+	var buf strings.Builder
+	for _, word := range strings.Split(Words[r.Intn(len(Words))], "_") {
+		buf.WriteString(strings.Title(word))
+	}
+	return buf.String()
 }
