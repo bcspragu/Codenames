@@ -54,6 +54,10 @@ func Forbidden(format string, args ...interface{}) *Error {
 	return newError(http.StatusForbidden, format, args...)
 }
 
+func Teapot(format string, args ...interface{}) *Error {
+	return newError(http.StatusTeapot, format, args...)
+}
+
 func newError(statusCode int, format string, args ...interface{}) *Error {
 	return &Error{
 		statusCode: statusCode,

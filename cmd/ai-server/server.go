@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/bcspragu/Codenames/client"
 	"github.com/bcspragu/Codenames/codenames"
@@ -16,6 +17,14 @@ import (
 	"github.com/bcspragu/Codenames/w2v"
 	"github.com/bcspragu/Codenames/web"
 )
+
+const (
+	maxConcurrentGames = 25
+)
+
+type activePlayer struct {
+	gameID codenames.GameID
+}
 
 type Server struct {
 	ai              *w2v.AI
@@ -25,6 +34,9 @@ type Server struct {
 	r               *rand.Rand
 
 	mux *http.ServeMux
+
+	mu            sync.Mutex
+	activePlayers map[codenames.RobotID]*activePlayer
 }
 
 func newServer(ai *w2v.AI, authSecret, webServerScheme, webServerAddr string, r *rand.Rand) *Server {
@@ -34,6 +46,7 @@ func newServer(ai *w2v.AI, authSecret, webServerScheme, webServerAddr string, r 
 		webServerScheme: webServerScheme,
 		webServerAddr:   webServerAddr,
 		r:               r,
+		activePlayers:   make(map[codenames.RobotID]*activePlayer),
 	}
 	srv.initMux()
 	return srv
@@ -97,13 +110,44 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 		return httperr.Internal("failed to join game %q: %w", gID, err)
 	}
 
+	s.mu.Lock()
+	if len(s.activePlayers) >= maxConcurrentGames {
+		s.mu.Unlock()
+		return httperr.
+			Teapot("can't join a game when we already have %d active games", len(s.activePlayers)).
+			WithMessage("too many active AIs, try again later")
+	}
+	s.activePlayers[rID] = &activePlayer{gameID: gID}
+	s.mu.Unlock()
+	log.Printf("Created player %q in game %q", rID, gID)
+
+	// Background the process of playingk
+	go func() {
+		defer s.unlockPlayer(rID)
+
+		s.playGame(c, gID, rID)
+	}()
+
+	return jsonResp(w, struct {
+		RobotID string `json:"robot_id"`
+		Success bool   `json:"success"`
+	}{string(rID), true})
+}
+
+func (s *Server) unlockPlayer(rID codenames.RobotID) {
+	s.mu.Lock()
+	delete(s.activePlayers, rID)
+	s.mu.Unlock()
+}
+
+func (s *Server) playGame(c *client.Client, gID codenames.GameID, rID codenames.RobotID) {
 	var (
 		role     codenames.Role
 		team     codenames.Team
 		lastClue *codenames.Clue
 	)
 
-	err = c.ListenForUpdates(gID, client.WSHooks{
+	err := c.ListenForUpdates(gID, client.WSHooks{
 		OnConnect: func() {
 			// TODO(bcspragu): Decide if we need to do anything once we connect.
 		},
@@ -191,10 +235,8 @@ func (s *Server) serveJoin(w http.ResponseWriter, r *http.Request) error {
 		},
 	})
 	if err != nil {
-		return httperr.Internal("error listening for updates in game %q: %w", gID, err)
+		log.Printf("[ERROR] error listening for updates in game %q: %v", gID, err)
 	}
-
-	return nil
 }
 
 func (s *Server) giveClue(b *codenames.Board, agent codenames.Agent) (*codenames.Clue, error) {
@@ -259,4 +301,13 @@ func (s *Server) handleError(h handlerFunc) http.HandlerFunc {
 		code, userMsg := httperr.Extract(err)
 		http.Error(w, userMsg, code)
 	}
+}
+
+func jsonResp(w http.ResponseWriter, v interface{}) error {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		return httperr.Internal("failed to encode response for %+v of type %T: %w", v, v, err)
+	}
+
+	return nil
 }

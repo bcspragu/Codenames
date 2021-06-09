@@ -58,6 +58,7 @@ steps:
       from_secret: ssh_key
     script:
       - sudo systemctl restart codenames.service
+      - sudo systemctl restart codenames-ai.service
       - sudo systemctl restart codenames-frontend.service
   when:
     branch:

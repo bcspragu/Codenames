@@ -120,6 +120,20 @@ generally RESTful way. The endpoints are as follows:
   ]
   ```
 
+* `POST /api/game/{id}/requestAI` - Requests that an AI joins the given game.
+  Only available to the person who created the game, before the game is started.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/requestAI
+  {} // No body or anything
+
+  == Example Response ==
+  {
+    "success": true,
+    "robot_id": "robot_abc123"
+  }
+  ```
+
 * `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
   select roles, they just join games. The host will then assign roles to the
   users in a given game.

@@ -102,6 +102,23 @@ func (c *Client) JoinGame(gID codenames.GameID) error {
 	return nil
 }
 
+func (c *Client) RequestAI(gID codenames.GameID) (codenames.RobotID, error) {
+	req, err := http.NewRequest(http.MethodPost, c.scheme+"://"+c.addr+"/api/game/"+string(gID)+"/requestAI", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to form request: %w", err)
+	}
+
+	var resp struct {
+		Success bool   `json:"success"`
+		RobotID string `json:"robot_id"`
+	}
+	if err := c.do(req, &resp); err != nil {
+		return "", fmt.Errorf("failed to request AI join game: %w", err)
+	}
+
+	return codenames.RobotID(resp.RobotID), nil
+}
+
 func (c *Client) AssignRole(gID codenames.GameID, pID codenames.PlayerID, team codenames.Team, role codenames.Role) error {
 	body := struct {
 		PlayerID codenames.PlayerID `json:"player_id"`
@@ -235,8 +252,4 @@ type errReader struct {
 
 func (e *errReader) Read(_ []byte) (int, error) {
 	return 0, e.err
-}
-
-func main() {
-	fmt.Println("vim-go")
 }

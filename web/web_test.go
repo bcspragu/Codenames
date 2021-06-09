@@ -334,6 +334,7 @@ func setup() *testEnv {
 			db,
 			rand.New(rand.NewSource(0)),
 			setupCookies(),
+			nil, /* AI client, not used yet */
 		),
 	}
 }

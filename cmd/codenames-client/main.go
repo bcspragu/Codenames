@@ -251,6 +251,14 @@ func lobbyShell(reader *bufio.Reader, c *client.Client, gameID codenames.GameID)
 				continue
 			}
 			return
+		case txt == "request_ai":
+			rID, err := c.RequestAI(gameID)
+			if err != nil {
+				log.Printf("failed to request AI: %v", err)
+				continue
+			}
+			fmt.Printf("AI added successfully, ID %q\n", rID)
+			continue
 		case strings.HasPrefix(txt, "assign"):
 			ps := strings.Split(txt, " ")
 			if len(ps) != 4 {

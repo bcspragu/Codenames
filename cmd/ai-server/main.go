@@ -1,13 +1,13 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"math/rand"
 	"net/http"
 
 	"github.com/bcspragu/Codenames/cryptorand"
 	"github.com/bcspragu/Codenames/w2v"
+	"github.com/namsral/flag"
 )
 
 func main() {

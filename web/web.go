@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/bcspragu/Codenames/aiclient"
 	"github.com/bcspragu/Codenames/boardgen"
 	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/consensus"
@@ -31,10 +32,11 @@ type Srv struct {
 	r         *rand.Rand
 	ws        *websocket.Upgrader
 	consensus *consensus.Guesser
+	ai        *aiclient.Client
 }
 
 // New returns an initialized server.
-func New(db codenames.DB, r *rand.Rand, sc *securecookie.SecureCookie) *Srv {
+func New(db codenames.DB, r *rand.Rand, sc *securecookie.SecureCookie, ai *aiclient.Client) *Srv {
 	s := &Srv{
 		sc:        sc,
 		hub:       hub.New(),
@@ -42,6 +44,7 @@ func New(db codenames.DB, r *rand.Rand, sc *securecookie.SecureCookie) *Srv {
 		r:         r,
 		ws:        &websocket.Upgrader{}, // use default options, for now
 		consensus: consensus.New(),
+		ai:        ai,
 	}
 
 	s.mux = s.initMux()
@@ -106,6 +109,12 @@ func (s *Srv) initMux() *mux.Router {
 			path:        "/api/game/{id}/players",
 			method:      http.MethodGet,
 			handlerFunc: s.requireGameAuth(s.serveGamePlayers),
+		},
+		// Request to add an AI player to a game.
+		{
+			path:        "/api/game/{id}/requestAI",
+			method:      http.MethodPost,
+			handlerFunc: s.requireGameAuth(s.serveRequestAI, isGameCreator(), isGamePending()),
 		},
 		// Join game.
 		{
@@ -347,6 +356,18 @@ func (s *Srv) serveGame(w http.ResponseWriter, r *http.Request, p *codenames.Pla
 	}
 
 	return jsonResp(w, game)
+}
+
+func (s *Srv) serveRequestAI(w http.ResponseWriter, r *http.Request, creator *codenames.Player, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
+	robotID, err := s.ai.JoinGame(game.ID)
+	if err != nil {
+		return httperr.Internal("failed to request an AI join game %q: %w", game.ID, err)
+	}
+
+	return jsonResp(w, struct {
+		Success bool   `json:"success"`
+		RobotID string `json:"robot_id"`
+	}{true, string(robotID)})
 }
 
 func (s *Srv) serveGamePlayers(w http.ResponseWriter, r *http.Request, p *codenames.Player, game *codenames.Game, userPR *codenames.PlayerRole, prs []*codenames.PlayerRole) error {
