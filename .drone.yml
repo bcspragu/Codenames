@@ -2,11 +2,12 @@ kind: pipeline
 name: default
 
 steps:
-- name: backend
+- name: backends
   image: golang:1.16
   commands:
     - export GOPROXY=https://athens.bsprague.com
     - GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/codenames-server/server github.com/bcspragu/Codenames/cmd/codenames-server
+    - CGO_ENABLED=0 GOOS=linux go build -ldflags '-extldflags "-static" -s -w' -o cmd/ai-server/server github.com/bcspragu/Codenames/cmd/ai-server
     - go test ./...
 - name: frontend
   image: plugins/docker
@@ -30,6 +31,20 @@ steps:
       from_secret: docker_password
     dockerfile: cmd/codenames-server/Dockerfile
     context: cmd/codenames-server/
+  when:
+    branch:
+    - master
+- name: docker-ai-backend
+  image: plugins/docker
+  settings:
+    repo: docker.bsprague.com/codenames-ai
+    registry: docker.bsprague.com
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    dockerfile: cmd/ai-server/Dockerfile
+    context: cmd/ai-server/
   when:
     branch:
     - master
