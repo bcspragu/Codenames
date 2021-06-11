@@ -38,6 +38,10 @@ func BadRequest(format string, args ...interface{}) *Error {
 	return newError(http.StatusBadRequest, format, args...)
 }
 
+func MethodNotAllowed(format string, args ...interface{}) *Error {
+	return newError(http.StatusMethodNotAllowed, format, args...)
+}
+
 func Internal(format string, args ...interface{}) *Error {
 	return newError(http.StatusInternalServerError, format, args...)
 }
@@ -48,6 +52,10 @@ func Unauthorized(format string, args ...interface{}) *Error {
 
 func Forbidden(format string, args ...interface{}) *Error {
 	return newError(http.StatusForbidden, format, args...)
+}
+
+func Teapot(format string, args ...interface{}) *Error {
+	return newError(http.StatusTeapot, format, args...)
 }
 
 func newError(statusCode int, format string, args ...interface{}) *Error {

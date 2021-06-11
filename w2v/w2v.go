@@ -1,8 +1,8 @@
 package w2v
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"sort"
 	"strings"
@@ -18,70 +18,96 @@ type AI struct {
 
 // Init initializes the word2vec model.
 func New(file string) (*AI, error) {
-	log.Println("Opening w2v model...")
 	f, err := os.Open(file)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open model file %q: %v", file, err)
+		return nil, fmt.Errorf("failed to open model file %q: %w", file, err)
 	}
 	defer f.Close()
 
-	log.Println("Reading w2v model...")
 	model, err := word2vec.FromReader(f)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse model file %q: %v", file, err)
+		return nil, fmt.Errorf("failed to parse model file %q: %w", file, err)
 	}
 
-	log.Println("Read w2v model")
 	return &AI{Model: model}, nil
 }
 
-func (ai *AI) GiveClue(b *codenames.Board) (*codenames.Clue, error) {
-
+func (ai *AI) GiveClue(b *codenames.Board, agent codenames.Agent) (*codenames.Clue, error) {
 	bestScore := float32(-1.0)
 	clue := "???"
 
-	unused := codenames.Targets(b.Cards, codenames.RedAgent)
-	log.Print(unused)
-	for i := 0; i < len(unused); i++ {
+	for _, word := range toWordList(codenames.Unrevealed(codenames.Targets(b.Cards, agent))) {
 		expr := word2vec.Expr{}
-		expr.Add(1, unused[i].Codename)
-		matches, _ := ai.Model.CosN(expr, 2)
-		match := matches[1]
-		log.Printf("%v = %s %f", unused[i], match.Word, match.Score)
-		if match.Score > bestScore {
-			bestScore = match.Score
-			clue = match.Word
+		expr.Add(1, word)
+		matches, err := ai.Model.CosN(expr, 5)
+		if errors.Is(err, word2vec.NotFoundError{}) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to load similar words: %w", err)
+		}
+
+		for _, match := range matches {
+			if tooCloseToBoardWord(match.Word, b) {
+				continue
+			}
+			if match.Score > bestScore {
+				bestScore = match.Score
+				clue = match.Word
+			}
 		}
 	}
-
-	// TODO: Confirm that the clue chosen isn't a superset of any of the words on
-	// the board (ex. 'band' and 'bands').
 
 	return &codenames.Clue{Word: clue, Count: 1}, nil
 }
 
-func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
-	unused := codenames.Unused(b.Cards)
-
-	// TODO: Probably remove this check, maybe when we support the sneaky 0-count
-	// clue.
-	if c.Count > len(unused) {
-		return "", fmt.Errorf("clue was for %d words, only %d words are available", c.Count, len(unused))
+func tooCloseToBoardWord(clue string, b *codenames.Board) bool {
+	for _, card := range b.Cards {
+		if strings.Contains(clue, card.Codename) || strings.Contains(card.Codename, clue) {
+			return true
+		}
 	}
+	return false
+}
 
-	pairs := make([]struct {
+func toWordList(targets []codenames.Card) []string {
+	var available []string
+	for _, c := range targets {
+		// Some cards contain underscores, which makes them unlikely to appear in
+		// the model corpus. So what we do is we try to insert two copies of the
+		// word, one with the underscore removed, and one with the underscore
+		// replaced with a space. The idea is that hopefully one of these appears
+		// in the source corpus.
+		if strings.Contains(c.Codename, "_") {
+			available = append(available, strings.Replace(c.Codename, "_", "", -1))
+			available = append(available, strings.Replace(c.Codename, "_", " ", -1))
+		} else {
+			available = append(available, c.Codename)
+		}
+	}
+	return available
+}
+
+func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
+	type pair struct {
 		Word       string
 		Similarity float32
-	}, len(unused))
+	}
 
-	for i, card := range unused {
-		sim, err := ai.similarity(c.Word, card.Codename)
+	var pairs []pair
+	for _, word := range toWordList(codenames.Unused(b.Cards)) {
+		sim, err := ai.similarity(c.Word, word)
+		if errors.Is(err, word2vec.NotFoundError{}) {
+			continue
+		}
 		if err != nil {
-			return "", fmt.Errorf("failed to get similarity of %q and %q: %v", c.Word, card.Codename, err)
+			return "", fmt.Errorf("failed to get similarity of %q and %q: %w", c.Word, word, err)
 		}
 
-		pairs[i].Word = card.Codename
-		pairs[i].Similarity = sim
+		pairs = append(pairs, pair{
+			Word:       word,
+			Similarity: sim,
+		})
 	}
 
 	// Sort the board words most similar -> least similar.
@@ -97,7 +123,7 @@ func (ai *AI) Guess(b *codenames.Board, c *codenames.Clue) (string, error) {
 func (ai *AI) similarity(a, b string) (float32, error) {
 	s, err := ai.Model.Cos(exp(strings.ToLower(a)), exp(strings.ToLower(b)))
 	if err != nil {
-		return 0.0, fmt.Errorf("failed to determine similarity: %v", err)
+		return 0.0, fmt.Errorf("failed to determine similarity: %w", err)
 	}
 	return s, nil
 }

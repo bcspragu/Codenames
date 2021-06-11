@@ -204,7 +204,7 @@ func (g *Game) Play() (*Outcome, error) {
 			sm, op = g.cfg.BlueSpymaster, g.cfg.BlueOperative
 		}
 
-		clue, err := sm.GiveClue(codenames.CloneBoard(g.state.Board))
+		clue, err := sm.GiveClue(codenames.CloneBoard(g.state.Board), g.activeAgent())
 		if err != nil {
 			return nil, fmt.Errorf("GiveClue on %q: %w", g.state.ActiveTeam, err)
 		}
@@ -229,6 +229,17 @@ func (g *Game) Play() (*Outcome, error) {
 				return nil, fmt.Errorf("Guess on %q: %v", g.state.ActiveTeam, err)
 			}
 		}
+	}
+}
+
+func (g *Game) activeAgent() codenames.Agent {
+	switch g.state.ActiveTeam {
+	case codenames.BlueTeam:
+		return codenames.BlueAgent
+	case codenames.RedTeam:
+		return codenames.RedAgent
+	default:
+		return codenames.UnknownAgent
 	}
 }
 

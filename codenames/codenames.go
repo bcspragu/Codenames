@@ -17,7 +17,7 @@ const (
 
 type Spymaster interface {
 	// GiveClue takes in a board and returns a clue for players to guess with.
-	GiveClue(*Board) (*Clue, error)
+	GiveClue(*Board, Agent) (*Clue, error)
 }
 
 type Operative interface {
@@ -32,6 +32,17 @@ type Board struct {
 	// to the top-left, the fourth to the top-right, and the twenty-fourth to the
 	// bottom-right.
 	Cards []Card `json:"cards"`
+}
+
+func (b *Board) Clone() *Board {
+	if b == nil {
+		return nil
+	}
+
+	cards := make([]Card, len(b.Cards))
+	copy(cards, b.Cards)
+
+	return &Board{Cards: cards}
 }
 
 // Clue is a word and a count from the Spymaster.
@@ -132,6 +143,17 @@ func Targets(cards []Card, agent Agent) []Card {
 	var out []Card
 	for _, card := range cards {
 		if card.Agent == agent {
+			out = append(out, card)
+		}
+	}
+	return out
+}
+
+// Unrevealed returns a list of cards that haven't been turned over yet.
+func Unrevealed(cards []Card) []Card {
+	var out []Card
+	for _, card := range cards {
+		if !card.Revealed {
 			out = append(out, card)
 		}
 	}

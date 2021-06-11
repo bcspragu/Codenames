@@ -42,9 +42,9 @@ func (cg *ClueGiven) MarshalJSON() ([]byte, error) {
 
 type jsonPlayerVote PlayerVote
 type PlayerVote struct {
-	UserID    codenames.UserID `json:"user_id"`
-	Guess     string           `json:"guess"`
-	Confirmed bool             `json:"confirmed"`
+	PlayerID  codenames.PlayerID `json:"player_id"`
+	Guess     string             `json:"guess"`
+	Confirmed bool               `json:"confirmed"`
 }
 
 func (pv *PlayerVote) MarshalJSON() ([]byte, error) {

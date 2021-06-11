@@ -63,8 +63,10 @@ func main() {
 	}
 
 	var (
-		rsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout, Team: codenames.RedTeam}
-		bsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout, Team: codenames.BlueTeam}
+		// Spymasters get team information via the API.
+		rsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout}
+		bsm codenames.Spymaster = &io.Spymaster{In: os.Stdin, Out: os.Stdout}
+
 		rop codenames.Operative = &io.Operative{In: os.Stdin, Out: os.Stdout, Team: codenames.RedTeam}
 		bop codenames.Operative = &io.Operative{In: os.Stdin, Out: os.Stdout, Team: codenames.BlueTeam}
 	)

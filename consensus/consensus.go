@@ -13,8 +13,8 @@ func New() *Guesser {
 }
 
 type Vote struct {
-	UserID codenames.UserID
-	Word   string
+	PlayerID codenames.PlayerID
+	Word     string
 }
 
 type Guesser struct {
@@ -22,12 +22,12 @@ type Guesser struct {
 	guesses map[codenames.GameID][]*Vote
 }
 
-func (g *Guesser) RecordVote(gID codenames.GameID, uID codenames.UserID, word string, totalVoters int) (string, bool) {
+func (g *Guesser) RecordVote(gID codenames.GameID, pID codenames.PlayerID, word string, totalVoters int) (string, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	for _, vote := range g.guesses[gID] {
-		if vote.UserID == uID {
+		if vote.PlayerID == pID {
 			// Update an existing player's vote.
 			vote.Word = word
 			return g.reachedConsensus(gID, totalVoters)
@@ -36,8 +36,8 @@ func (g *Guesser) RecordVote(gID codenames.GameID, uID codenames.UserID, word st
 
 	// If we're here, this is a new vote.
 	g.guesses[gID] = append(g.guesses[gID], &Vote{
-		UserID: uID,
-		Word:   word,
+		PlayerID: pID,
+		Word:     word,
 	})
 
 	return g.reachedConsensus(gID, totalVoters)

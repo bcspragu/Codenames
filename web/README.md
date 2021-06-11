@@ -14,7 +14,10 @@ generally RESTful way. The endpoints are as follows:
   ```
   == Example Request ==
   POST /api/user
-  {"name": "Testy McTesterson"}
+  {
+    "name": "Testy McTesterson",
+    "player_type": "HUMAN"
+  }
 
   == Example Response ==
   Set-Cookie Authorization $SOME_ENCRYPTED_AUTH_TOKEN
@@ -23,6 +26,9 @@ generally RESTful way. The endpoints are as follows:
 
   The important thing is to make sure the client is actually respecting the
   `Set-Cookie` response header, or auth won't actually work.
+
+* `PATCH /api/user` - Updates the logged in user.
+  NOTE: This isn't actually implemented yet.
 
 * `GET /api/user` - Loads information about the currently logged in user,
   returns `null` if there's no authentication header, or the account isn't
@@ -95,11 +101,67 @@ generally RESTful way. The endpoints are as follows:
   you to be in the game. If you aren't in the game (or are, but aren't the
   spymaster).
 
-* `POST /api/game/{id}/join` - Joins the game with the given ID.
+* `GET /api/game/{id}/players` - Returns a list of all the players who've
+  joined the game, useful for showing the lobby and whatnot.
+  ```
+  == Example Request ==
+  GET /api/game/TheGameID123/players
+  {} // No body or anything
+
+  == Example Response ==
+  [
+    {
+      "player_id": {"player_type": "human", "id": "abc123"},
+      "name": "Testy McTesterson",
+      "team": "BLUE",
+      "role": "SPYMASTER",
+    },
+    {... more players ...}
+  ]
+  ```
+
+* `POST /api/game/{id}/requestAI` - Requests that an AI joins the given game.
+  Only available to the person who created the game, before the game is started.
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/requestAI
+  {} // No body or anything
+
+  == Example Response ==
+  {
+    "success": true,
+    "robot_id": "robot_abc123"
+  }
+  ```
+
+* `POST /api/game/{id}/join` - Joins the game with the given ID. Users don't
+  select roles, they just join games. The host will then assign roles to the
+  users in a given game.
+
   ```
   == Example Request ==
   POST /api/game/TheGameID123/join
-  {"team": "RED", "role": "SPYMASTER"}
+  {} // No body or anything
+
+  == Example Response ==
+  {"success": true}
+  ```
+  This adds the user to the lobby for a game.
+
+* `POST /api/game/{id}/assignRole` - Assigns a role to a given player, can only
+  be called by hosts before the game starts.
+
+  ```
+  == Example Request ==
+  POST /api/game/TheGameID123/assignRole
+  {
+    "player_id": {
+      "id": "abc123",
+      "player_type": "HUMAN"
+    },
+    "team": "RED",
+    "role": "SPYMASTER"
+  }
 
   == Example Response ==
   {"success": true}
@@ -111,10 +173,15 @@ generally RESTful way. The endpoints are as follows:
 
 * `POST /api/game/{id}/start` - Kicks off the game with the given ID, can only
   be called by the person who created the game, once all roles have been
-  filled.
+  filled. If not all roles have been filled, you can optionally specify
+  `"random_assignment": true` in order to have the game assign any unassigned
+  players to roles.
   ```
   == Example Request ==
   POST /api/game/TheGameID123/start
+  {"random_assignment": false}
+
+  == Example Response ==
   {"success": true}
   ```
   This will send down a WebSocket message to all connected players indicating
@@ -214,7 +281,10 @@ message structure, or look at the handy guide below:
   ```
   {
     "action": "PLAYER_VOTE",
-    "user_id": "abc123",
+    "player_id": {
+      "player_type": "ROBOT",
+      "id": "abc123"
+    },
     "guess": "blade",
     "confirmed": true
   }

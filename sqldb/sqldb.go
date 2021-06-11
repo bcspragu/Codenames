@@ -15,8 +15,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var ()
-
 var (
 	// Game statements
 	createGameStmt      = `INSERT INTO Games (id, status, creator_id, state) VALUES (?, ?, ?, ?)`
@@ -36,15 +34,30 @@ WHERE id = ?`
 	createUserStmt = `INSERT INTO Users (id, display_name) VALUES (?, ?)`
 	getUserStmt    = `SELECT id, display_name FROM Users WHERE id = ?`
 
+	// Robot statements
+	createAIStmt = `INSERT INTO AIs (id, display_name) VALUES (?, ?)`
+	getRobotStmt = `SELECT id, display_name FROM AIs WHERE id = ?`
+
 	// Player (e.g. user or AI) statements
 	getUserPlayerStmt = `SELECT id FROM Players WHERE user_id = ?`
 	getAIPlayerStmt   = `SELECT id FROM Players WHERE ai_id = ?`
 	createPlayerStmt  = `INSERT INTO Players (id, user_id, ai_id) VALUES (?, ?, ?)`
 
 	// Game player (e.g. Game <-> Player join table) statements
-	joinGameStmt   = `INSERT INTO GamePlayers (game_id, player_id, role, team) VALUES (?, ?, ?, ?)`
+	joinGameStmt = `
+INSERT INTO GamePlayers
+(game_id, player_id, role_assigned) VALUES
+(?, ?, 0)`
+
+	assignRoleStmt = `
+UPDATE GamePlayers
+SET role_assigned = 1,
+		role = ?,
+		team = ?
+WHERE game_id = ?
+	AND player_id = ?`
 	getGamePlayers = `
-SELECT Players.user_id, Players.ai_id, GamePlayers.role, GamePlayers.team
+SELECT Players.user_id, Players.ai_id, GamePlayers.role, GamePlayers.team, GamePlayers.role_assigned
 FROM GamePlayers
 JOIN Players
 	ON GamePlayers.player_id = Players.id
@@ -195,7 +208,7 @@ func (s *DB) Game(gID codenames.GameID) (*codenames.Game, error) {
 	return res.game, nil
 }
 
-func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
+func (s *DB) NewUser(name string) (codenames.UserID, error) {
 	type result struct {
 		id  codenames.UserID
 		err error
@@ -204,7 +217,7 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 	resChan := make(chan *result)
 	s.dbChan <- func(sdb *sql.DB) {
 		id := codenames.RandomUserID(s.r)
-		_, err := sdb.Exec(createUserStmt, string(id), u.Name)
+		_, err := sdb.Exec(createUserStmt, string(id), name)
 		if err != nil {
 			resChan <- &result{err: err}
 			return
@@ -216,6 +229,31 @@ func (s *DB) NewUser(u *codenames.User) (codenames.UserID, error) {
 	res := <-resChan
 	if res.err != nil {
 		return codenames.UserID(""), res.err
+	}
+	return res.id, nil
+}
+
+func (s *DB) NewRobot(name string) (codenames.RobotID, error) {
+	type result struct {
+		id  codenames.RobotID
+		err error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		id := codenames.RandomRobotID(s.r)
+		_, err := sdb.Exec(createAIStmt, string(id), name)
+		if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{id: id}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return codenames.RobotID(""), res.err
 	}
 	return res.id, nil
 }
@@ -246,6 +284,34 @@ func (s *DB) User(id codenames.UserID) (*codenames.User, error) {
 		return nil, res.err
 	}
 	return res.user, nil
+}
+
+func (s *DB) Robot(id codenames.RobotID) (*codenames.Robot, error) {
+	type result struct {
+		robot *codenames.Robot
+		err   error
+	}
+
+	resChan := make(chan *result)
+	s.dbChan <- func(sdb *sql.DB) {
+		var r codenames.Robot
+		err := sdb.QueryRow(getRobotStmt, string(id)).Scan(&r.ID, &r.Name)
+		if err == sql.ErrNoRows {
+			resChan <- &result{err: codenames.ErrRobotNotFound}
+			return
+		} else if err != nil {
+			resChan <- &result{err: err}
+			return
+		}
+
+		resChan <- &result{robot: &r}
+	}
+
+	res := <-resChan
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.robot, nil
 }
 
 func (s *DB) PendingGames() ([]codenames.GameID, error) {
@@ -306,13 +372,22 @@ func (s *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, error
 		var prs []*codenames.PlayerRole
 		for rows.Next() {
 			var (
-				pr     codenames.PlayerRole
+				pr codenames.PlayerRole
+
+				role   sql.NullString
+				team   sql.NullString
 				userID sql.NullString
 				aiID   sql.NullString
 			)
-			if err := rows.Scan(&userID, &aiID, &pr.Role, &pr.Team); err != nil {
+			if err := rows.Scan(&userID, &aiID, &role, &team, &pr.RoleAssigned); err != nil {
 				resChan <- &result{err: fmt.Errorf("failed to scan game player: %w", err)}
 				return
+			}
+			if role.Valid {
+				pr.Role = codenames.Role(role.String)
+			}
+			if team.Valid {
+				pr.Team = codenames.Team(team.String)
 			}
 			if userID.Valid && aiID.Valid {
 				resChan <- &result{err: fmt.Errorf("both user_id and ai_id were set: %q, %q", userID.String, aiID.String)}
@@ -352,11 +427,11 @@ func (s *DB) PlayersInGame(gID codenames.GameID) ([]*codenames.PlayerRole, error
 	return res.prs, nil
 }
 
-func (s *DB) JoinGame(gID codenames.GameID, req *codenames.PlayerRole) error {
+func (s *DB) JoinGame(gID codenames.GameID, pID codenames.PlayerID) error {
 	// First, see if a player entity already exists for this player.
-	pID, err := s.player(req.PlayerID)
+	entityID, err := s.Player(pID)
 	if err == sql.ErrNoRows {
-		if pID, err = s.createPlayer(req.PlayerID); err != nil {
+		if entityID, err = s.createPlayer(pID); err != nil {
 			return fmt.Errorf("failed to create player: %w", err)
 		}
 	}
@@ -367,12 +442,45 @@ func (s *DB) JoinGame(gID codenames.GameID, req *codenames.PlayerRole) error {
 	// If we're here, we've got a player ID and we can add them to the game.
 	resChan := make(chan error)
 	s.dbChan <- func(sdb *sql.DB) {
-		_, err := sdb.Exec(joinGameStmt, gID, pID, req.Role, req.Team)
+		_, err := sdb.Exec(joinGameStmt, gID, entityID)
 		resChan <- err
 	}
 
 	if err := <-resChan; err != nil {
 		return fmt.Errorf("failed to join game: %w", err)
+	}
+	return nil
+}
+
+func (s *DB) AssignRole(gID codenames.GameID, req *codenames.PlayerRole) error {
+	// First, see if a player entity already exists for this player.
+	pID, err := s.Player(req.PlayerID)
+	if err != nil {
+		return fmt.Errorf("failed to load player: %w", err)
+	}
+
+	// If we're here, we've got a player ID and we can add them to the game.
+	resChan := make(chan error)
+	s.dbChan <- func(sdb *sql.DB) {
+		res, err := sdb.Exec(assignRoleStmt, req.Role, req.Team, gID, pID)
+		if err != nil {
+			resChan <- fmt.Errorf("failed to assign role: %w", err)
+			return
+		}
+		numRows, err := res.RowsAffected()
+		if err != nil {
+			resChan <- fmt.Errorf("failed to get the number of affected rows: %w", err)
+			return
+		}
+		if numRows != 1 {
+			resChan <- fmt.Errorf("%d rows affected, expected exactly 1", numRows)
+			return
+		}
+		resChan <- nil
+	}
+
+	if err := <-resChan; err != nil {
+		return err
 	}
 	return nil
 }
@@ -412,7 +520,7 @@ func (s *DB) createPlayer(id codenames.PlayerID) (string, error) {
 	return res.id, nil
 }
 
-func (s *DB) player(id codenames.PlayerID) (string, error) {
+func (s *DB) Player(id codenames.PlayerID) (string, error) {
 	type result struct {
 		id  string
 		err error

@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"encoding/json"
@@ -7,43 +7,52 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bcspragu/Codenames/codenames"
 	"github.com/bcspragu/Codenames/web"
 	"github.com/gorilla/websocket"
 )
 
 type wsClient struct {
 	conn  *websocket.Conn
+	msgs  chan []byte
 	done  chan struct{}
-	hooks wsHooks
+	hooks WSHooks
 }
 
-func (c *client) listenForUpdates(gID string, hooks wsHooks) error {
+func (c *Client) ListenForUpdates(gID codenames.GameID, hooks WSHooks) error {
 	scheme := "ws"
 	if c.scheme == "https" {
 		scheme = "wss"
 	}
 
-	addr := scheme + "://" + c.addr + "/api/game/" + gID + "/ws"
+	addr := scheme + "://" + c.addr + "/api/game/" + string(gID) + "/ws"
 
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		Jar:              c.client.Jar,
+		Jar:              c.http.Jar,
 	}
 	conn, _, err := dialer.Dial(addr, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
 
-	if hooks.onConnect != nil {
-		go hooks.onConnect()
+	if hooks.OnConnect != nil {
+		go hooks.OnConnect()
 	}
 
 	wsc := &wsClient{
-		conn:  conn,
-		done:  make(chan struct{}),
+		conn: conn,
+		done: make(chan struct{}),
+		// We buffer it in case messages come in while we're waiting on user input.
+		// We don't want to process messages concurrently, because that seems
+		// likely to cause tricky problems.
+		msgs:  make(chan []byte, 100),
 		hooks: hooks,
 	}
+
+	go wsc.handleMessages()
+
 	return wsc.read()
 }
 
@@ -54,30 +63,43 @@ func (ws *wsClient) read() error {
 		if err != nil {
 			return fmt.Errorf("ReadMessage: %w", err)
 		}
+
 		if messageType != websocket.TextMessage {
 			continue
 		}
 
-		var justAction struct {
-			Action string `json:"action"`
-		}
-		if err := json.Unmarshal(message, &justAction); err != nil {
-			return fmt.Errorf("json.Unmarshal: %w", err)
-		}
+		ws.msgs <- message
+	}
+}
 
-		switch justAction.Action {
-		case "GAME_START":
-			ws.handleGameStart(message)
-		case "CLUE_GIVEN":
-			ws.handleClueGiven(message)
-		case "PLAYER_VOTE":
-			ws.handlePlayerVote(message)
-		case "GUESS_GIVEN":
-			ws.handleGuessGiven(message)
-		case "GAME_END":
-			ws.handleGameEnd(message)
-		default:
-			log.Printf("unknown message action %q", justAction.Action)
+func (ws *wsClient) handleMessages() {
+	for {
+		select {
+		case <-ws.done:
+			return
+		case msg := <-ws.msgs:
+			var justAction struct {
+				Action string `json:"action"`
+			}
+			if err := json.Unmarshal(msg, &justAction); err != nil {
+				log.Printf("failed to unmarshal action from server: %v", err)
+				return
+			}
+
+			switch justAction.Action {
+			case "GAME_START":
+				ws.handleGameStart(msg)
+			case "CLUE_GIVEN":
+				ws.handleClueGiven(msg)
+			case "PLAYER_VOTE":
+				ws.handlePlayerVote(msg)
+			case "GUESS_GIVEN":
+				ws.handleGuessGiven(msg)
+			case "GAME_END":
+				ws.handleGameEnd(msg)
+			default:
+				log.Printf("unknown message action %q", justAction.Action)
+			}
 		}
 	}
 }
@@ -91,10 +113,10 @@ func (ws *wsClient) handleGameStart(dat []byte) {
 
 	fmt.Println(string(dat))
 	fmt.Printf("%+v\n", gs)
-	if ws.hooks.onStart == nil {
+	if ws.hooks.OnStart == nil {
 		return
 	}
-	ws.hooks.onStart(&gs)
+	ws.hooks.OnStart(&gs)
 }
 
 func (ws *wsClient) handleClueGiven(dat []byte) {
@@ -104,10 +126,10 @@ func (ws *wsClient) handleClueGiven(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onClueGiven == nil {
+	if ws.hooks.OnClueGiven == nil {
 		return
 	}
-	ws.hooks.onClueGiven(&cg)
+	ws.hooks.OnClueGiven(&cg)
 }
 
 func (ws *wsClient) handlePlayerVote(dat []byte) {
@@ -117,10 +139,10 @@ func (ws *wsClient) handlePlayerVote(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onPlayerVote == nil {
+	if ws.hooks.OnPlayerVote == nil {
 		return
 	}
-	ws.hooks.onPlayerVote(&pv)
+	ws.hooks.OnPlayerVote(&pv)
 }
 
 func (ws *wsClient) handleGuessGiven(dat []byte) {
@@ -130,10 +152,10 @@ func (ws *wsClient) handleGuessGiven(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onGuessGiven == nil {
+	if ws.hooks.OnGuessGiven == nil {
 		return
 	}
-	ws.hooks.onGuessGiven(&gg)
+	ws.hooks.OnGuessGiven(&gg)
 }
 
 func (ws *wsClient) handleGameEnd(dat []byte) {
@@ -143,17 +165,17 @@ func (ws *wsClient) handleGameEnd(dat []byte) {
 		return
 	}
 
-	if ws.hooks.onEnd == nil {
+	if ws.hooks.OnEnd == nil {
 		return
 	}
-	ws.hooks.onEnd(&ge)
+	ws.hooks.OnEnd(&ge)
 }
 
-type wsHooks struct {
-	onConnect    func()
-	onStart      func(*web.GameStart)
-	onClueGiven  func(*web.ClueGiven)
-	onPlayerVote func(*web.PlayerVote)
-	onGuessGiven func(*web.GuessGiven)
-	onEnd        func(*web.GameEnd)
+type WSHooks struct {
+	OnConnect    func()
+	OnStart      func(*web.GameStart)
+	OnClueGiven  func(*web.ClueGiven)
+	OnPlayerVote func(*web.PlayerVote)
+	OnGuessGiven func(*web.GuessGiven)
+	OnEnd        func(*web.GameEnd)
 }
