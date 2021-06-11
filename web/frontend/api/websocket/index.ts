@@ -9,6 +9,7 @@ export class Socket {
 
   constructor() {
     if (!areWebSocketsSupported()) {
+      alert("Your computer ain't it");
       return; // Hopefully just a server-side render...
     }
 
@@ -26,7 +27,7 @@ export class Socket {
   getURI() {
     const { location } = window;
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsGameEndpoint = '/api/ws/game/:id';
+    const wsGameEndpoint = '/api/game/:gameId/ws';
 
     return `${wsProtocol}//${location.host}${wsGameEndpoint}`;
   }
